@@ -466,7 +466,7 @@ async function createWindow(
     minWidth: 1080,
     minHeight: 700,
     autoHideMenuBar: true,
-    show: false,
+    backgroundColor: "#f7f7f6",
     webPreferences: {
       preload: join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -492,10 +492,7 @@ async function createWindow(
   window.webContents.on("will-attach-webview", (event) => {
     event.preventDefault();
   });
-  window.once("ready-to-show", () => {
-    window.maximize();
-    window.show();
-  });
+  window.maximize();
   window.once("closed", () => {
     if (mainWindow === window) mainWindow = undefined;
   });

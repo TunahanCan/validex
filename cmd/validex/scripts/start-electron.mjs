@@ -12,9 +12,40 @@ const scriptPath = fileURLToPath(import.meta.url);
 const scriptsDirectory = dirname(scriptPath);
 export const defaultApplicationRoot = resolve(scriptsDirectory, "..");
 
+function hasOzonePlatformArgument(arguments_) {
+  return arguments_.some(
+    (argument) =>
+      argument === "--ozone-platform" ||
+      argument.startsWith("--ozone-platform="),
+  );
+}
+
+export function linuxGraphicsArguments({
+  arguments: forwardedArguments = [],
+  environment = process.env,
+  platform = process.platform,
+} = {}) {
+  if (
+    platform !== "linux" ||
+    hasOzonePlatformArgument(forwardedArguments) ||
+    environment.DISPLAY?.trim() === "" ||
+    environment.DISPLAY === undefined
+  ) {
+    return [];
+  }
+
+  const waylandSession =
+    environment.XDG_SESSION_TYPE?.trim().toLowerCase() === "wayland" ||
+    Boolean(environment.WAYLAND_DISPLAY?.trim());
+  // Electron 38+ can fail to present the first frame on native Wayland.
+  // Prefer XWayland only when DISPLAY confirms that it is available.
+  return waylandSession ? ["--ozone-platform=x11"] : [];
+}
+
 export function electronLaunchPlan({
   applicationRoot = defaultApplicationRoot,
   arguments: forwardedArguments = [],
+  environment = process.env,
   platform = process.platform,
 } = {}) {
   const root = resolve(applicationRoot);
@@ -41,8 +72,13 @@ export function electronLaunchPlan({
       ],
     };
   }
+  const graphicsArguments = linuxGraphicsArguments({
+    arguments: forwardedArguments,
+    environment,
+    platform,
+  });
   return {
-    arguments: [root, ...forwardedArguments],
+    arguments: [root, ...graphicsArguments, ...forwardedArguments],
     command: process.execPath,
     preparation: undefined,
     runtimeArguments: [
@@ -125,11 +161,13 @@ export function runChildProcess(command, arguments_, options = {}) {
 export async function startElectron({
   applicationRoot = defaultApplicationRoot,
   arguments: forwardedArguments = process.argv.slice(2),
+  environment = process.env,
   platform = process.platform,
 } = {}) {
   const plan = electronLaunchPlan({
     applicationRoot,
     arguments: forwardedArguments,
+    environment,
     platform,
   });
   if (platform === "darwin") {

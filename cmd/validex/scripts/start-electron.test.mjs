@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   defaultApplicationRoot,
   electronLaunchPlan,
+  linuxGraphicsArguments,
   runChildProcess,
 } from "./start-electron.mjs";
 
@@ -47,6 +48,7 @@ test("non-macOS development keeps the platform Electron launcher", () => {
   const plan = electronLaunchPlan({
     applicationRoot,
     arguments: ["--backend=/tmp/validex-backend"],
+    environment: { DISPLAY: ":0", XDG_SESSION_TYPE: "x11" },
     platform: "linux",
   });
 
@@ -59,6 +61,64 @@ test("non-macOS development keeps the platform Electron launcher", () => {
     "--backend=/tmp/validex-backend",
   ]);
   assert.equal(plan.preparation, undefined);
+});
+
+test("Linux Wayland development uses available XWayland graphics", () => {
+  for (const environment of [
+    { DISPLAY: ":0", XDG_SESSION_TYPE: "wayland" },
+    { DISPLAY: ":0", WAYLAND_DISPLAY: "wayland-0" },
+  ]) {
+    assert.deepEqual(
+      linuxGraphicsArguments({
+        arguments: ["--backend=/tmp/validex-backend"],
+        environment,
+        platform: "linux",
+      }),
+      ["--ozone-platform=x11"],
+    );
+  }
+
+  const plan = electronLaunchPlan({
+    applicationRoot,
+    arguments: ["--backend=/tmp/validex-backend"],
+    environment: {
+      DISPLAY: ":0",
+      WAYLAND_DISPLAY: "wayland-0",
+      XDG_SESSION_TYPE: "wayland",
+    },
+    platform: "linux",
+  });
+  assert.deepEqual(plan.arguments, [
+    applicationRoot,
+    "--ozone-platform=x11",
+    "--backend=/tmp/validex-backend",
+  ]);
+});
+
+test("Linux launcher preserves explicit and pure Wayland runtimes", () => {
+  for (const arguments_ of [
+    ["--ozone-platform=wayland"],
+    ["--ozone-platform", "wayland"],
+  ]) {
+    assert.deepEqual(
+      linuxGraphicsArguments({
+        arguments: arguments_,
+        environment: { DISPLAY: ":0", XDG_SESSION_TYPE: "wayland" },
+        platform: "linux",
+      }),
+      [],
+    );
+  }
+  assert.deepEqual(
+    linuxGraphicsArguments({
+      environment: {
+        WAYLAND_DISPLAY: "wayland-0",
+        XDG_SESSION_TYPE: "wayland",
+      },
+      platform: "linux",
+    }),
+    [],
+  );
 });
 
 test("desktop start scripts never launch the stock Electron bundle directly", async () => {

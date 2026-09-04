@@ -1,5 +1,8 @@
-export interface HardwareAccelerationController {
-  disableHardwareAcceleration(): void;
+export interface GraphicsCompatibilityController {
+  commandLine: {
+    appendSwitch(name: string, value?: string): void;
+    getSwitchValue(name: string): string;
+  };
 }
 
 export interface GraphicsCompatibilityOptions {
@@ -29,9 +32,8 @@ function commandLineValue(
 }
 
 /**
- * Native Wayland and Chromium Vulkan are not a reliable combination across
- * Linux drivers. X11/XWayland keeps acceleration; native Wayland uses the
- * stable software path for this text-and-DOM-focused desktop application.
+ * Electron can select native Wayland automatically from the desktop session.
+ * An explicit X11 selection always takes precedence over that metadata.
  */
 export function requiresWaylandGraphicsFallback({
   arguments: arguments_ = process.argv,
@@ -40,10 +42,10 @@ export function requiresWaylandGraphicsFallback({
 }: GraphicsCompatibilityOptions = {}): boolean {
   if (platform !== "linux") return false;
 
-  const ozonePlatform = (
-    commandLineValue(arguments_, "ozone-platform") ??
-    environment.ELECTRON_OZONE_PLATFORM_HINT
-  )?.trim().toLowerCase();
+  const ozonePlatform = commandLineValue(
+    arguments_,
+    "ozone-platform",
+  )?.toLowerCase();
   if (ozonePlatform === "x11") return false;
   if (ozonePlatform === "wayland") return true;
 
@@ -53,11 +55,31 @@ export function requiresWaylandGraphicsFallback({
   );
 }
 
+function withDisabledFeature(value: string, feature: string): string {
+  const features = value
+    .split(",")
+    .map((candidate) => candidate.trim())
+    .filter((candidate) => candidate !== "");
+  if (!features.includes(feature)) features.push(feature);
+  return features.join(",");
+}
+
+/**
+ * Chromium 150 can select an incompatible Vulkan path on native Wayland.
+ * Disable only Vulkan instead of disabling GPU compositing altogether.
+ */
 export function configureGraphicsCompatibility(
-  application: HardwareAccelerationController,
+  application: GraphicsCompatibilityController,
   options: GraphicsCompatibilityOptions = {},
 ): boolean {
   if (!requiresWaylandGraphicsFallback(options)) return false;
-  application.disableHardwareAcceleration();
+  const disabledFeatures = withDisabledFeature(
+    application.commandLine.getSwitchValue("disable-features"),
+    "Vulkan",
+  );
+  application.commandLine.appendSwitch(
+    "disable-features",
+    disabledFeatures,
+  );
   return true;
 }

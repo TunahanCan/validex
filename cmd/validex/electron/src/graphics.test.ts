@@ -6,75 +6,56 @@ import {
   requiresWaylandGraphicsFallback,
 } from "./graphics";
 
-test("native Linux Wayland uses the stable software graphics path", () => {
-  equal(
-    requiresWaylandGraphicsFallback({
-      arguments: ["electron", "/app"],
-      environment: {
-        DISPLAY: ":0",
-        WAYLAND_DISPLAY: "wayland-0",
-        XDG_SESSION_TYPE: "wayland",
-      },
-      platform: "linux",
-    }),
-    true,
-  );
-  equal(
-    requiresWaylandGraphicsFallback({
-      arguments: ["electron", "/app"],
-      environment: { WAYLAND_DISPLAY: "wayland-1" },
-      platform: "linux",
-    }),
-    true,
-  );
+test("Linux Wayland sessions require the Vulkan compatibility path", () => {
+  for (const environment of [
+    { XDG_SESSION_TYPE: "wayland" },
+    { WAYLAND_DISPLAY: "wayland-0" },
+  ]) {
+    equal(
+      requiresWaylandGraphicsFallback({
+        arguments: ["electron", "/app"],
+        environment,
+        platform: "linux",
+      }),
+      true,
+    );
+  }
 });
 
-test("an explicit X11 runtime keeps Linux hardware acceleration", () => {
+test("explicit Ozone selections take precedence over session metadata", () => {
   const environment = {
     WAYLAND_DISPLAY: "wayland-0",
     XDG_SESSION_TYPE: "wayland",
   };
-  equal(
-    requiresWaylandGraphicsFallback({
-      arguments: ["electron", "/app", "--ozone-platform=x11"],
-      environment,
-      platform: "linux",
-    }),
-    false,
-  );
-  equal(
-    requiresWaylandGraphicsFallback({
-      arguments: ["electron", "/app", "--ozone-platform", "x11"],
-      environment,
-      platform: "linux",
-    }),
-    false,
-  );
-  equal(
-    requiresWaylandGraphicsFallback({
-      arguments: ["electron", "/app"],
-      environment: {
-        ...environment,
-        ELECTRON_OZONE_PLATFORM_HINT: "x11",
-      },
-      platform: "linux",
-    }),
-    false,
-  );
+  for (const arguments_ of [
+    ["electron", "/app", "--ozone-platform=x11"],
+    ["electron", "/app", "--ozone-platform", "x11"],
+  ]) {
+    equal(
+      requiresWaylandGraphicsFallback({
+        arguments: arguments_,
+        environment,
+        platform: "linux",
+      }),
+      false,
+    );
+  }
+  for (const arguments_ of [
+    ["electron", "/app", "--ozone-platform=wayland"],
+    ["electron", "/app", "--ozone-platform", "wayland"],
+  ]) {
+    equal(
+      requiresWaylandGraphicsFallback({
+        arguments: arguments_,
+        environment: { XDG_SESSION_TYPE: "x11" },
+        platform: "linux",
+      }),
+      true,
+    );
+  }
 });
 
-test("an explicit Wayland runtime enables fallback independently of session metadata", () => {
-  equal(
-    requiresWaylandGraphicsFallback({
-      arguments: ["electron", "/app", "--ozone-platform=wayland"],
-      environment: { XDG_SESSION_TYPE: "x11" },
-      platform: "linux",
-    }),
-    true,
-  );
-});
-
-test("X11 and non-Linux runtimes keep hardware acceleration", () => {
+test("X11 and non-Linux runtimes retain their graphics defaults", () => {
   for (const options of [
     {
       arguments: ["electron", "/app"],
@@ -96,11 +77,16 @@ test("X11 and non-Linux runtimes keep hardware acceleration", () => {
   }
 });
 
-test("graphics compatibility configures Electron only when required", () => {
-  const calls: string[] = [];
+test("native Wayland disables Vulkan without disabling GPU compositing", () => {
+  const calls: [string, string | undefined][] = [];
   const application = {
-    disableHardwareAcceleration() {
-      calls.push("disable-hardware-acceleration");
+    commandLine: {
+      appendSwitch(name: string, value?: string) {
+        calls.push([name, value]);
+      },
+      getSwitchValue(name: string) {
+        return name === "disable-features" ? "ExistingFeature,Vulkan" : "";
+      },
     },
   };
 
@@ -114,11 +100,36 @@ test("graphics compatibility configures Electron only when required", () => {
   );
   equal(
     configureGraphicsCompatibility(application, {
-      arguments: ["electron", "/app"],
-      environment: { XDG_SESSION_TYPE: "x11" },
+      arguments: ["electron", "/app", "--ozone-platform=x11"],
+      environment: { XDG_SESSION_TYPE: "wayland" },
       platform: "linux",
     }),
     false,
   );
-  deepStrictEqual(calls, ["disable-hardware-acceleration"]);
+  deepStrictEqual(calls, [
+    ["disable-features", "ExistingFeature,Vulkan"],
+  ]);
+});
+
+test("native Wayland preserves existing disabled Chromium features", () => {
+  const calls: [string, string | undefined][] = [];
+  const application = {
+    commandLine: {
+      appendSwitch(name: string, value?: string) {
+        calls.push([name, value]);
+      },
+      getSwitchValue() {
+        return "ExistingFeature";
+      },
+    },
+  };
+
+  configureGraphicsCompatibility(application, {
+    arguments: ["electron", "/app"],
+    environment: { WAYLAND_DISPLAY: "wayland-0" },
+    platform: "linux",
+  });
+  deepStrictEqual(calls, [
+    ["disable-features", "ExistingFeature,Vulkan"],
+  ]);
 });
