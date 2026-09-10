@@ -7,6 +7,8 @@ import { backendRequestErrorMessages } from "./messages/backendErrorsRequest.js"
 import { coreMessages } from "./messages/core.js";
 import { diagnosticsProtocolsMessages } from "./messages/diagnosticsProtocols.js";
 import { requestMessages } from "./messages/requests.js";
+import { performanceInsightsMessages } from "./messages/performanceInsights.js";
+import { performanceControlsMessages } from "./messages/performanceControls.js";
 
 export const supportedLocales = ["tr", "en"] as const;
 
@@ -22,8 +24,10 @@ const englishMessages = {
   ...backendToolsErrorMessages.en,
   ...backendRequestErrorMessages.en,
   ...requestMessages.en,
+  ...performanceControlsMessages.en,
   ...automationToolsMessages.en,
   ...diagnosticsProtocolsMessages.en,
+  ...performanceInsightsMessages.en,
 } as const;
 
 export type TranslationKey = keyof typeof englishMessages;
@@ -36,8 +40,10 @@ const turkishMessages = {
   ...backendToolsErrorMessages.tr,
   ...backendRequestErrorMessages.tr,
   ...requestMessages.tr,
+  ...performanceControlsMessages.tr,
   ...automationToolsMessages.tr,
   ...diagnosticsProtocolsMessages.tr,
+  ...performanceInsightsMessages.tr,
 } satisfies Record<TranslationKey, string>;
 
 export const messages: Readonly<

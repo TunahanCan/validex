@@ -43,16 +43,12 @@ const toolLabels = {
     json: "JSON Lab",
     diagnostics: "Diagnostics",
     performance: "Performance",
-    protocols: "SSE Stream",
-    automation: "Automation",
   },
   tr: {
     mock: "Mock Sunucu",
     json: "JSON Laboratuvarı",
     diagnostics: "Tanılama",
     performance: "Performans",
-    protocols: "SSE Akışı",
-    automation: "Otomasyon",
   },
 };
 
@@ -141,23 +137,23 @@ test("status bar follows the active workspace context", () => {
 
 test("workspace activity remains busy until every operation releases its lease", () => {
   const originalState = workspaceStore.getState();
-  workspaceStore.setState({ activeView: "automation" });
+  workspaceStore.setState({ activeView: "performance" });
   const root = fakeRoot();
   const statusBar = mountStatusBar(root, { appVersion: "9.8.7" });
   let notifications = 0;
   const unsubscribe = subscribeWorkspaceActivity(() => {
     notifications += 1;
   });
-  const runner = beginWorkspaceActivity("automation");
-  const network = beginWorkspaceActivity("automation");
+  const runner = beginWorkspaceActivity("performance");
+  const network = beginWorkspaceActivity("performance");
 
   try {
-    assert.equal(workspaceIsBusy("automation"), true);
+    assert.equal(workspaceIsBusy("performance"), true);
     assert.equal(notifications, 1);
     assert.match(root.innerHTML, /Working…/);
 
     runner.dispose();
-    assert.equal(workspaceIsBusy("automation"), true);
+    assert.equal(workspaceIsBusy("performance"), true);
     assert.equal(notifications, 1);
     assert.match(root.innerHTML, /Working…/);
 
@@ -165,7 +161,7 @@ test("workspace activity remains busy until every operation releases its lease",
     assert.equal(notifications, 1, "lease disposal is idempotent");
 
     network.dispose();
-    assert.equal(workspaceIsBusy("automation"), false);
+    assert.equal(workspaceIsBusy("performance"), false);
     assert.equal(notifications, 2);
     assert.match(root.innerHTML, /Ready/);
   } finally {
@@ -178,16 +174,16 @@ test("workspace activity remains busy until every operation releases its lease",
 });
 
 test("workspace activity scope releases unfinished controller work", () => {
-  const scope = createWorkspaceActivityScope("protocols");
+  const scope = createWorkspaceActivityScope("mock");
   const first = scope.begin();
   scope.begin();
-  assert.equal(workspaceIsBusy("protocols"), true);
+  assert.equal(workspaceIsBusy("mock"), true);
 
   first.dispose();
-  assert.equal(workspaceIsBusy("protocols"), true);
+  assert.equal(workspaceIsBusy("mock"), true);
 
   scope.dispose();
-  assert.equal(workspaceIsBusy("protocols"), false);
+  assert.equal(workspaceIsBusy("mock"), false);
   assert.throws(() => scope.begin(), /scope is disposed/);
 });
 

@@ -86,27 +86,6 @@ export const workspaceDefinitions = [
     load: async () =>
       (await import("./features/performance.js")).mountPerformanceLab,
   },
-  {
-    id: "protocols",
-    labelKey: "workspace.protocols.label",
-    compactLabelKey: "workspace.protocols.compactLabel",
-    descriptionKey: "workspace.protocols.description",
-    keywords: "sse server sent events event stream olay akış connection bağlantı",
-    icon: "protocols",
-    group: "tools",
-    load: async () => (await import("./features/protocol-lab.js")).mountProtocolLab,
-  },
-  {
-    id: "automation",
-    labelKey: "workspace.automation.label",
-    compactLabelKey: "workspace.automation.compactLabel",
-    descriptionKey: "workspace.automation.description",
-    keywords: "automation collection runner assertion dns redirect openapi lint cli",
-    icon: "automation",
-    group: "tools",
-    load: async () =>
-      (await import("./features/automation.js")).mountAutomationLab,
-  },
 ] as const satisfies readonly WorkspaceDefinition[];
 
 type RegisteredToolWorkspaceDefinition = Extract<

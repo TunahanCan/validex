@@ -25,8 +25,6 @@ func (w *browserWorld) openNamedWorkspace(label string) error {
 		"json":        "json",
 		"diagnostics": "diagnostics",
 		"performance": "performance",
-		"protocols":   "protocols",
-		"automation":  "automation",
 	}[strings.ToLower(strings.TrimSpace(label))]
 	if !ok {
 		return fmt.Errorf("unknown workspace %q", label)

@@ -26,5 +26,3 @@ Feature: Validex browser smoke
       | json        |
       | diagnostics |
       | performance |
-      | protocols   |
-      | automation  |

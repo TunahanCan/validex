@@ -53,8 +53,6 @@ Feature: Use Validex across viewport sizes and input methods
       | JSON        |
       | Diagnostics |
       | Performance |
-      | Protocols   |
-      | Automation  |
 
   @responsive @drawer @keyboard
   Scenario: Use request side panels as modal drawers on a narrow viewport

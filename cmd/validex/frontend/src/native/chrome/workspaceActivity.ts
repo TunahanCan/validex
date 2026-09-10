@@ -1,25 +1,27 @@
 import type { Disposable } from "../../core/dom.js";
 import type { WorkspaceView } from "../../lib/types.js";
 
+// Internal controllers may retain activity without being navigation destinations.
+type WorkspaceActivityOwner = WorkspaceView | "protocols" | "automation";
 type WorkspaceActivityListener = () => void;
 
 export interface WorkspaceActivityLease extends Disposable {
-  readonly view: WorkspaceView;
+  readonly view: WorkspaceActivityOwner;
 }
 
 export interface WorkspaceActivityScope extends Disposable {
-  readonly view: WorkspaceView;
+  readonly view: WorkspaceActivityOwner;
   begin(): WorkspaceActivityLease;
 }
 
-const activityCounts = new Map<WorkspaceView, number>();
+const activityCounts = new Map<WorkspaceActivityOwner, number>();
 const listeners = new Set<WorkspaceActivityListener>();
 
 function notifyActivityChanged(): void {
   for (const listener of listeners) listener();
 }
 
-export function workspaceIsBusy(view: WorkspaceView): boolean {
+export function workspaceIsBusy(view: WorkspaceActivityOwner): boolean {
   return (activityCounts.get(view) ?? 0) > 0;
 }
 
@@ -28,7 +30,7 @@ export function workspaceIsBusy(view: WorkspaceView): boolean {
  * every independently acquired lease has been disposed.
  */
 export function beginWorkspaceActivity(
-  view: WorkspaceView,
+  view: WorkspaceActivityOwner,
 ): WorkspaceActivityLease {
   const current = activityCounts.get(view) ?? 0;
   activityCounts.set(view, current + 1);
@@ -57,7 +59,7 @@ export function beginWorkspaceActivity(
  * work without retaining every historical operation.
  */
 export function createWorkspaceActivityScope(
-  view: WorkspaceView,
+  view: WorkspaceActivityOwner,
 ): WorkspaceActivityScope {
   const leases = new Set<WorkspaceActivityLease>();
   let disposed = false;

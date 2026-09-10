@@ -293,11 +293,11 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.runtime.baselineCleared": "Runtime baseline cleared.",
 
     "diagnostics.performance.eyebrow":
-      "URL BENCHMARK · SEQUENTIAL COLD REQUESTS",
+      "PERFORMANCE LAB · URL BENCHMARK",
     "diagnostics.performance.workspaceDescription":
       "Benchmark one URL and inspect latency, reliability, percentiles, and request-level network details.",
     "diagnostics.performance.benchmarkType":
-      "Sequential · cold connections",
+      "Configurable load · cold connections",
     "diagnostics.performance.targetTitle": "Test a URL",
     "diagnostics.performance.targetDescription":
       "Measure cold end-to-end latency with isolated requests.",
@@ -322,11 +322,11 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.performance.cancelFailure":
       "The URL performance stop command could not be completed.",
     "diagnostics.performance.safetyHint":
-      "Runs sequentially from this device (maximum 1,000). Test only systems you are authorized to access.",
+      "Runs from this device with configurable concurrency (maximum 1,000 measured requests).",
     "diagnostics.performance.confirmLargeRun.title":
       "Run an extended benchmark?",
     "diagnostics.performance.confirmLargeRun.description":
-      "Validex will send {count} sequential probes from this device.",
+      "Validex will send {count} probes from this device using the selected load settings.",
     "diagnostics.performance.confirmLargeRun.hint":
       "This can take a long time and create meaningful traffic. Confirm that you control or are authorized to test the target.",
     "diagnostics.performance.confirmLargeRun.confirm":
@@ -334,7 +334,7 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.performance.resultTitle": "Cold request latency",
     "diagnostics.performance.aggregateTitle": "URL performance report",
     "diagnostics.performance.resultDescription":
-      "A JMeter-style aggregate for sequential probes. Each sample opens a fresh transport; this is a benchmark, not a concurrent load generator.",
+      "Measured latency, reliability, and throughput for this run. Each request opens a fresh connection; warm-up requests are excluded.",
     "diagnostics.performance.metricsLabel": "Timing summary",
     "diagnostics.performance.fastest": "Fastest",
     "diagnostics.performance.average": "Average",
@@ -367,7 +367,7 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.performance.errorCode": "ERR · {code}",
     "diagnostics.performance.aggregateReport": "Aggregate report",
     "diagnostics.performance.aggregateHint":
-      "Sequential cold-request metrics · {scope}",
+      "Cold-request metrics · {scope}",
     "diagnostics.performance.label": "Label",
     "diagnostics.performance.sampleCount": "Samples",
     "diagnostics.performance.totalLabel": "TOTAL",
@@ -969,11 +969,11 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.runtime.baselineCleared": "Runtime baseline temizlendi.",
 
     "diagnostics.performance.eyebrow":
-      "URL BENCHMARK · SIRALI SOĞUK İSTEKLER",
+      "PERFORMANS LAB · URL TESTİ",
     "diagnostics.performance.workspaceDescription":
       "Tek bir URL’yi ölçün; gecikme, güvenilirlik, yüzdelik dilimler ve istek bazında ağ ayrıntılarını inceleyin.",
     "diagnostics.performance.benchmarkType":
-      "Sıralı · soğuk bağlantılar",
+      "Ayarlanabilir yük · soğuk bağlantılar",
     "diagnostics.performance.targetTitle": "URL’yi ölç",
     "diagnostics.performance.targetDescription":
       "Bağımsız isteklerle soğuk uçtan uca gecikmeyi ölçün.",
@@ -998,11 +998,11 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.performance.cancelFailure":
       "URL performansı durdurma komutu tamamlanamadı.",
     "diagnostics.performance.safetyHint":
-      "Ölçüm bu cihazdan sıralı çalışır (en fazla 1.000). Yalnızca erişim yetkiniz olan sistemleri test edin.",
+      "Ölçüm bu cihazdan ayarlanabilir eşzamanlılıkla çalışır (en fazla 1.000 ölçüm isteği).",
     "diagnostics.performance.confirmLargeRun.title":
       "Uzun benchmark çalıştırılsın mı?",
     "diagnostics.performance.confirmLargeRun.description":
-      "Validex bu cihazdan sıralı olarak {count} ölçüm isteği gönderecek.",
+      "Validex seçilen yük ayarlarıyla bu cihazdan {count} ölçüm isteği gönderecek.",
     "diagnostics.performance.confirmLargeRun.hint":
       "Bu işlem uzun sürebilir ve anlamlı miktarda trafik oluşturabilir. Hedefi kontrol ettiğinizi veya test yetkiniz olduğunu doğrulayın.",
     "diagnostics.performance.confirmLargeRun.confirm":
@@ -1010,7 +1010,7 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.performance.resultTitle": "Soğuk istek gecikmesi",
     "diagnostics.performance.aggregateTitle": "URL performans raporu",
     "diagnostics.performance.resultDescription":
-      "Sıralı ölçümler için JMeter tarzı toplu rapor. Her ölçüm yeni bağlantı açar; bu bir benchmark’tır, eşzamanlı yük üreticisi değildir.",
+      "Bu teste ait gecikme, güvenilirlik ve iş hacmi ölçümleri. Her istek yeni bağlantı açar; ısınma istekleri sonuçlara dahil edilmez.",
     "diagnostics.performance.metricsLabel": "Süre özeti",
     "diagnostics.performance.fastest": "En hızlı",
     "diagnostics.performance.average": "Ortalama",
@@ -1043,7 +1043,7 @@ export const diagnosticsProtocolsMessages = defineMessages(
     "diagnostics.performance.errorCode": "HATA · {code}",
     "diagnostics.performance.aggregateReport": "Toplu rapor",
     "diagnostics.performance.aggregateHint":
-      "Sıralı soğuk istek metrikleri · {scope}",
+      "Soğuk istek metrikleri · {scope}",
     "diagnostics.performance.label": "Etiket",
     "diagnostics.performance.sampleCount": "Örnekler",
     "diagnostics.performance.totalLabel": "TOPLAM",

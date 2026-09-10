@@ -18,8 +18,6 @@ var shellWorkspaceIDs = map[string]string{
 	"JSON":        "json",
 	"Diagnostics": "diagnostics",
 	"Performance": "performance",
-	"Protocols":   "protocols",
-	"Automation":  "automation",
 }
 
 func shellPlatformCommandModifier() input.Modifier {

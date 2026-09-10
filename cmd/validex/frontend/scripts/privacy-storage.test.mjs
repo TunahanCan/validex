@@ -114,6 +114,22 @@ test("workspace migration adopts the new response default without replacing pref
   assert.equal(migratedMissingPreference.leftVisible, true);
 });
 
+test("removed tool workspaces restore Requests without losing saved requests", () => {
+  const saved = createRequestTab({ id: "saved-request", name: "Saved request" });
+  for (const activeView of ["protocols", "automation"]) {
+    for (const version of [8, workspaceStorageVersion]) {
+      const migrated = migratePersistedWorkspaceState(
+        { ...workspaceState([saved], saved.id), activeView },
+        version,
+      );
+      assert.equal(migrated.activeView, "requests");
+      assert.equal(migrated.activeTabID, saved.id);
+      assert.equal(migrated.tabs.length, 1);
+      assert.equal(migrated.tabs[0].name, "Saved request");
+    }
+  }
+});
+
 test("session-only browser requests never enter workspace persistence", () => {
   const persisted = createRequestTab({
     id: "persisted-tab",

@@ -516,7 +516,7 @@ func (w *browserWorld) responsiveNavigationItemsAreFullyVisible() error {
 	})()`, &result)); err != nil {
 		return err
 	}
-	if result.Count != 7 || !result.InsideBar || !result.LabelsFit || result.BarOverflow {
+	if result.Count != 5 || !result.InsideBar || !result.LabelsFit || result.BarOverflow {
 		return fmt.Errorf("primary navigation is clipped: %+v", result)
 	}
 	return nil

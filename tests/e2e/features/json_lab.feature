@@ -50,3 +50,11 @@ Feature: Transform and inspect JSON data locally
     Then the result is compact JSON with the same data
     When I clear the JSON editor
     Then the input, result, and notice are empty and focus returns to the editor
+
+  @palettes
+  Scenario: Change JSON syntax colors without disturbing the document
+    Given I am in the "Format" JSON Lab mode
+    And a highlighted JSON document contains HTML-like text and enough lines to scroll
+    When I try all three JSON color palettes
+    Then each palette changes the rendered colors while preserving text, selection, and scroll
+    And the selected JSON palette survives mode changes, workspace navigation, and reload

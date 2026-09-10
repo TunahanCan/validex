@@ -117,10 +117,6 @@ func TestLiveLocalAPIAudit(t *testing.T) {
 	audit.testJSONLab()
 	t.Log("testing Diagnostics modes")
 	audit.testDiagnostics(primary, candidate)
-	t.Log("testing streaming protocols")
-	audit.testProtocols(primary)
-	t.Log("testing automation tools")
-	audit.testAutomation(primary)
 	t.Log("capturing desktop and mobile visual matrices")
 	audit.captureWorkspaceMatrix("dark-desktop", 1440, 900)
 
@@ -134,11 +130,9 @@ func TestLiveLocalAPIAudit(t *testing.T) {
 		t.Fatalf("live Electron frontend errors:\n%s", strings.Join(errorsFound, "\n"))
 	}
 	if primary.hitCount("/api/orders/42") == 0 ||
-		primary.hitCount("/events") == 0 ||
 		primary.hitCount("/actuator/health") == 0 {
-		t.Fatalf("required live endpoints were not reached: orders=%d events=%d actuator=%d",
+		t.Fatalf("required live endpoints were not reached: orders=%d actuator=%d",
 			primary.hitCount("/api/orders/42"),
-			primary.hitCount("/events"),
 			primary.hitCount("/actuator/health"),
 		)
 	}
@@ -636,8 +630,6 @@ func (audit *liveAudit) captureWorkspaceMatrix(
 		"json",
 		"diagnostics",
 		"performance",
-		"protocols",
-		"automation",
 	} {
 		audit.openWorkspace(workspace)
 		audit.capture(fmt.Sprintf("live-matrix-%s-%s", prefix, workspace))

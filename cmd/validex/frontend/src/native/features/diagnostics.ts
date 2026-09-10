@@ -33,13 +33,11 @@ import type {
   CoverageResult,
   EnvironmentCompareResult,
   LogSearchResult,
-  NetworkInspectResult,
   ThreadDumpResult,
 } from "../../lib/types.js";
 import { workspaceStore } from "../../stores/workspace.js";
 import { subscribeWhenWorkspaceActive } from "../workspaceSubscriptions.js";
 import {
-  appendURLPerformanceReport,
   bridgeIssue,
   componentStatus,
   defaultMetricNames,
@@ -75,12 +73,34 @@ import {
   toolPageHeader,
 } from "../tool.js";
 import { createWorkspaceActivityScope } from "../chrome/workspaceActivity.js";
+import {
+  defaultPerformanceOptions, performancePresets, validatePerformanceOptions,
+  type PerformanceOptions,
+} from "../../features/performance/model.js";
+import { runPerformanceTest, type PerformanceRunHandle } from "../../features/performance/runner.js";
+import {
+  performanceExportCSV, performanceExportJSON, performanceSummaryText,
+  type PerformanceRunRecord,
+} from "../../features/performance/analysis.js";
+import { performanceInsights, renderPerformanceHistory } from "./performance-insights.js";
+import {
+  performanceControls, performanceOptionLabels, performanceSampleControls,
+  type PerformanceSampleFilter, type PerformanceSampleOrder,
+} from "./performance-controls.js";
+import { copyText } from "../clipboard.js";
 
 type ThreadLogMode = "thread" | "logs";
 
 interface EnvironmentTarget {
   name: string;
   baseUrl: string;
+}
+
+interface PerformanceSavedRun extends PerformanceRunRecord {
+  options: PerformanceOptions;
+  sampleCount: number;
+  timeoutMs: number;
+  status: "completed" | "canceled";
 }
 
 interface DiagnosticsState {
@@ -106,6 +126,17 @@ interface DiagnosticsState {
   performanceResult: URLPerformanceSummary | null;
   performanceCompletedSamples: number;
   performanceCanceling: boolean;
+  performanceOptions: PerformanceOptions;
+  performanceProfile: string;
+  performanceWarmupCompleted: number;
+  performanceActiveRequests: number;
+  performancePhase: "warmup" | "running" | "stopping";
+  performanceElapsedMs: number;
+  performanceBaseline: URLPerformanceSummary | null;
+  performanceHistory: PerformanceSavedRun[];
+  performanceFilter: PerformanceSampleFilter;
+  performanceOrder: PerformanceSampleOrder;
+  performanceStartedAt: string;
   environmentMethod: string;
   environmentPath: string;
   environmentBody: string;
@@ -780,9 +811,18 @@ function runtimeResult(
 
 function performanceResult(
   result: URLPerformanceSummary,
+  state: DiagnosticsState,
 ): TrustedHTMLFragment {
   const locale = getLocale();
   const statistics = urlPerformanceStatistics(result);
+  const samples = result.samples.filter((sample) =>
+    state.performanceFilter === "errors" ? !sample.success
+      : state.performanceFilter === "slow" ? sample.durationMs > state.performanceOptions.p95TargetMs : true,
+  );
+  if (state.performanceOrder !== "original") {
+    samples.sort((a, b) => state.performanceOrder === "slowest"
+      ? b.durationMs - a.durationMs : a.durationMs - b.durationMs);
+  }
   const formatNumber = (value: number, maximumFractionDigits = 2) =>
     value.toLocaleString(locale, { maximumFractionDigits });
   const sampleDetailLabel =
@@ -864,6 +904,9 @@ function performanceResult(
             ${t("diagnostics.performance.aggregateTitle")}
           </h2>
           <p>${t("diagnostics.performance.resultDescription")}</p>
+          ${result.completedSamples < state.performanceSampleCount ? html`
+            <small>${t("performance.controls.partial", { completed: result.completedSamples, total: state.performanceSampleCount })}</small>
+          ` : null}
         </div>
       </header>
 
@@ -882,6 +925,8 @@ function performanceResult(
           `,
         )}
       </div>
+
+      ${performanceInsights(result, state.performanceOptions, state.performanceBaseline)}
 
       <div class="diagnostics-performance-analysis-grid">
         <section
@@ -1088,6 +1133,8 @@ function performanceResult(
           </h3>
           <span>${sampleDetailLabel}</span>
         </header>
+        ${performanceSampleControls(state.performanceFilter, state.performanceOrder)}
+        ${samples.length === 0 ? html`<p class="performance-no-samples">${t("performance.controls.noSamples")}</p>` : null}
         <div class="diagnostics-table-wrap">
           <table class="diagnostics-table">
             <thead>
@@ -1103,7 +1150,7 @@ function performanceResult(
               </tr>
             </thead>
             <tbody>
-              ${result.samples.map((sample) => {
+              ${samples.map((sample) => {
                 const ratio =
                   result.slowestMs > 0
                     ? Math.max(
@@ -1934,7 +1981,7 @@ function performancePanel(state: DiagnosticsState): TrustedHTMLFragment {
             <h2 id="diagnostics-performance-target-title">
               ${t("diagnostics.performance.targetTitle")}
             </h2>
-            <p>${t("diagnostics.performance.targetDescription")}</p>
+            <p>${t("performance.controls.targetDescription")}</p>
           </div>
           <div
             class="diagnostics-performance-method"
@@ -1962,6 +2009,9 @@ function performancePanel(state: DiagnosticsState): TrustedHTMLFragment {
             <small id="diagnostics-performance-url-help" class="sr-only">
               ${t("diagnostics.performance.urlHelp")}
             </small>
+            <button type="button" class="button button-ghost button-sm"
+              data-diagnostics-action="performance-from-request" ${running ? html`disabled` : null}
+            >${t("performance.controls.fromRequest")}</button>
           </label>
           <div class="diagnostics-performance-primary-action">
             ${running
@@ -2031,9 +2081,10 @@ function performancePanel(state: DiagnosticsState): TrustedHTMLFragment {
           </div>
           <p class="diagnostics-performance-safety">
             ${icon("info", 14)}
-            <span>${t("diagnostics.performance.safetyHint")}</span>
+            <span>${t("performance.controls.limitHint")}</span>
           </p>
         </div>
+        ${performanceControls(state.performanceOptions, state.performanceProfile, state.performanceSampleCount, running)}
         ${running
           ? html`
               <div
@@ -2041,7 +2092,9 @@ function performancePanel(state: DiagnosticsState): TrustedHTMLFragment {
                 aria-live="polite"
               >
                 <div>
-                  <span>${t("diagnostics.performance.progress")}</span>
+                  <span data-performance-phase>${state.performancePhase === "warmup"
+                    ? t("performance.controls.warming", { completed: state.performanceWarmupCompleted, total: state.performanceOptions.warmupSamples })
+                    : t("diagnostics.performance.progress")}</span>
                   <strong data-performance-progress-label>
                     ${t("diagnostics.performance.progressValue", {
                       completed: state.performanceCompletedSamples,
@@ -2055,12 +2108,17 @@ function performancePanel(state: DiagnosticsState): TrustedHTMLFragment {
                   max="${state.performanceSampleCount}"
                   aria-label="${t("diagnostics.performance.progress")}">
                 </progress>
+                <small data-performance-live>${t("performance.controls.live", {
+                  active: state.performanceActiveRequests,
+                  elapsed: (state.performanceElapsedMs / 1000).toFixed(1),
+                })}</small>
               </div>
             `
           : ""}
       </section>
+      <div data-performance-results>
       ${state.performanceResult
-        ? performanceResult(state.performanceResult)
+        ? performanceResult(state.performanceResult, state)
         : html`
             <section class="diagnostics-performance-empty">
               ${emptyToolResult(
@@ -2070,6 +2128,8 @@ function performancePanel(state: DiagnosticsState): TrustedHTMLFragment {
               )}
             </section>
           `}
+      </div>
+      ${renderPerformanceHistory(state.performanceHistory)}
     </div>
   `;
 }
@@ -2491,7 +2551,7 @@ function pageMarkup(
           ? t("workspace.performance.label")
           : t("diagnostics.title"),
         description: standalonePerformance
-          ? t("diagnostics.performance.workspaceDescription")
+          ? t("performance.controls.workspace")
           : t("diagnostics.description"),
         meta: html`
           <strong>
@@ -2563,6 +2623,7 @@ function asyncInputSignature(state: DiagnosticsState): string {
     performanceURL: state.performanceURL,
     performanceTimeout: state.performanceTimeout,
     performanceSampleCount: state.performanceSampleCount,
+    performanceOptions: state.performanceOptions,
     environmentMethod: state.environmentMethod,
     environmentPath: state.environmentPath,
     environmentBody: state.environmentBody,
@@ -2624,6 +2685,17 @@ function mountDiagnosticsWorkspace(
     performanceResult: null,
     performanceCompletedSamples: 0,
     performanceCanceling: false,
+    performanceOptions: { ...defaultPerformanceOptions },
+    performanceProfile: "custom",
+    performanceWarmupCompleted: 0,
+    performanceActiveRequests: 0,
+    performancePhase: "running",
+    performanceElapsedMs: 0,
+    performanceBaseline: null,
+    performanceHistory: [],
+    performanceFilter: "all",
+    performanceOrder: "original",
+    performanceStartedAt: "",
     environmentMethod: "GET",
     environmentPath: "/actuator/health",
     environmentBody: "",
@@ -2663,10 +2735,8 @@ function mountDiagnosticsWorkspace(
     number,
     ReturnType<typeof activityScope.begin>
   >();
-  let performanceOperationSequence = 0;
-  let activePerformanceOperationID: string | undefined;
-  let pendingPerformanceCancellationID: string | undefined;
-  let performanceRunStartedAt: number | undefined;
+  let performanceRun: PerformanceRunHandle | undefined;
+  let performanceUpdateTimer: number | undefined;
   let performanceConfirmationDialog: DialogHandle | undefined;
   let pendingFocus:
     | {
@@ -2782,47 +2852,24 @@ function mountDiagnosticsWorkspace(
   };
 
   const cancelActivePerformanceOperation = () => {
-    const operationID = activePerformanceOperationID;
-    if (!operationID) return;
-    activePerformanceOperationID = undefined;
-    void backend.cancelToolOperation(operationID).catch(() => {
-      // Invalidation already detached the UI; cancellation is best effort.
-    });
-  };
-
-  const nextPerformanceOperationID = (): string => {
-    performanceOperationSequence += 1;
-    return `diagnostics-performance-${Date.now().toString(36)}-${performanceOperationSequence.toString(36)}`;
+    performanceRun?.dispose();
+    performanceRun = undefined;
+    if (performanceUpdateTimer !== undefined) {
+      window.clearTimeout(performanceUpdateTimer);
+      performanceUpdateTimer = undefined;
+    }
   };
 
   const invalidatePendingOperation = (): boolean => {
-    const invalidatedPerformance = state.busy === "performance";
-    if (
-      invalidatedPerformance &&
-      state.performanceResult &&
-      performanceRunStartedAt !== undefined
-    ) {
-      state.performanceResult = {
-        ...state.performanceResult,
-        elapsedTimeMs: Math.max(
-          0,
-          window.performance.now() - performanceRunStartedAt,
-        ),
-      };
-    }
     operationSequence += 1;
     for (const activity of operationActivities.values()) activity.dispose();
     operationActivities.clear();
     cancelActivePerformanceOperation();
-    pendingPerformanceCancellationID = undefined;
     state.performanceCanceling = false;
-    if (invalidatedPerformance) performanceRunStartedAt = undefined;
+    state.performanceActiveRequests = 0;
     if (!state.busy) return false;
     state.busy = "";
-    state.notice = {
-      tone: "info",
-      text: t("diagnostics.operation.stale"),
-    };
+    state.notice = { tone: "info", text: t("diagnostics.operation.stale") };
     return true;
   };
 
@@ -2946,20 +2993,14 @@ function mountDiagnosticsWorkspace(
         total: state.performanceSampleCount,
       });
     }
-  };
-
-  const performanceElapsedTime = (): number | undefined =>
-    performanceRunStartedAt === undefined
-      ? undefined
-      : Math.max(0, window.performance.now() - performanceRunStartedAt);
-
-  const recordCurrentPerformanceElapsedTime = () => {
-    const elapsedTimeMs = performanceElapsedTime();
-    if (!state.performanceResult || elapsedTimeMs === undefined) return;
-    state.performanceResult = {
-      ...state.performanceResult,
-      elapsedTimeMs,
-    };
+    const phase = optionalElement<HTMLElement>(root, "[data-performance-phase]");
+    if (phase) phase.textContent = state.performancePhase === "warmup"
+      ? t("performance.controls.warming", { completed: state.performanceWarmupCompleted, total: state.performanceOptions.warmupSamples })
+      : t("diagnostics.performance.progress");
+    const live = optionalElement<HTMLElement>(root, "[data-performance-live]");
+    if (live) live.textContent = t("performance.controls.live", {
+      active: state.performanceActiveRequests, elapsed: (state.performanceElapsedMs / 1000).toFixed(1),
+    });
   };
 
   const loadActiveResponse = () => {
@@ -3105,199 +3146,131 @@ function mountDiagnosticsWorkspace(
   };
 
   const runURLPerformanceTest = async () => {
+    if (state.busy) return;
     let targetURL: string;
     const sampleCount = state.performanceSampleCount;
     const timeoutMs = state.performanceTimeout;
+    const options = { ...state.performanceOptions };
     try {
       targetURL = validateURLPerformanceTarget(state.performanceURL, t);
       validateURLPerformanceOptions(sampleCount, timeoutMs, t);
+      const issue = validatePerformanceOptions(options);
+      if (issue) throw new Error(t("performance.controls.validation", {
+        field: t(performanceOptionLabels[issue.field]), min: issue.min, max: issue.max,
+      }));
     } catch (error) {
       showValidationError(errorText(error));
       return;
     }
-    if (!(await confirmLargePerformanceRun(sampleCount))) return;
+    if (!(await confirmLargePerformanceRun(sampleCount + options.warmupSamples))) return;
+    if (disposed || state.busy) return;
 
     state.performanceResult = null;
     state.performanceCompletedSamples = 0;
+    state.performanceWarmupCompleted = 0;
+    state.performanceActiveRequests = 0;
+    state.performanceElapsedMs = 0;
     state.performanceCanceling = false;
+    state.performancePhase = options.warmupSamples ? "warmup" : "running";
+    state.performanceFilter = "all";
+    state.performanceStartedAt = new Date().toISOString();
+    const startedAt = state.performanceStartedAt;
     const operation = startOperation("performance");
-    performanceRunStartedAt = window.performance.now();
-    let summary: URLPerformanceSummary | undefined;
-    const recordReport = (
-      report: NonNullable<NetworkInspectResult["report"]>,
-      error?: string,
-      failureCategory?: string,
-    ) => {
-      summary = appendURLPerformanceReport(
-        summary,
-        report,
-        error,
-        failureCategory,
-      );
-      state.performanceResult = summary;
-      state.performanceCompletedSamples = summary.completedSamples;
+    let progressObservedAt = window.performance.now();
+    let progressElapsedMs = 0;
+    const heartbeat = window.setInterval(() => {
+      if (!isCurrentOperation(operation) || state.performancePhase === "warmup") return;
+      state.performanceElapsedMs = progressElapsedMs + window.performance.now() - progressObservedAt;
       updatePerformanceProgress();
-    };
-    const recordElapsedTime = () => {
-      const elapsedTimeMs = performanceElapsedTime();
-      if (!summary || elapsedTimeMs === undefined) return;
-      summary = {
-        ...summary,
-        elapsedTimeMs,
-      };
-      state.performanceResult = summary;
+    }, 500);
+    const updateLiveResults = () => {
+      performanceUpdateTimer = undefined;
+      if (!isCurrentOperation(operation)) return;
+      const container = optionalElement<HTMLElement>(root, "[data-performance-results]");
+      // Keep focused table controls intact during a live update.
+      if (container && state.performanceResult && !container.contains(document.activeElement)) {
+        setHTML(container, performanceResult(state.performanceResult, state));
+      }
     };
     try {
-      for (let index = 0; index < sampleCount; index += 1) {
-        if (!isCurrentOperation(operation)) return;
-        const operationID = nextPerformanceOperationID();
-        activePerformanceOperationID = operationID;
-        let result: NetworkInspectResult;
-        try {
-          result = await backend.analyzeNetwork({
-            operationId: operationID,
-            url: targetURL,
-            timeoutMs,
-            maxRedirects: 5,
-            insecureSkipVerify: false,
+      const run = runPerformanceTest({
+        url: targetURL, sampleCount, timeoutMs, options,
+        analyze: (input) => backend.analyzeNetwork(input),
+        cancel: (id) => backend.cancelToolOperation(id),
+        describeUnexpectedStatus: (expected, actual) => t("performance.controls.unexpectedStatus", { expected, actual }),
+        describeFailure: (result) => {
+          const failure = resultIssue(result, t, {
+            title: "diagnostics.performance.errorTitle",
+            message: "diagnostics.performance.failure",
+            hint: "diagnostics.performance.errorHint",
           });
-        } finally {
-          if (activePerformanceOperationID === operationID) {
-            activePerformanceOperationID = undefined;
+          return failure
+            ? [...new Set([failure.text, failure.technical].filter(Boolean))].join(" · ")
+            : t("diagnostics.performance.sampleFailure");
+        },
+        onProgress: (progress) => {
+          if (!isCurrentOperation(operation)) return;
+          state.performanceResult = progress.summary ?? null;
+          state.performanceCompletedSamples = progress.completedSamples;
+          state.performanceWarmupCompleted = progress.warmupCompleted;
+          state.performanceActiveRequests = progress.activeRequests;
+          state.performancePhase = progress.phase;
+          state.performanceElapsedMs = progress.elapsedTimeMs;
+          progressObservedAt = window.performance.now();
+          progressElapsedMs = progress.elapsedTimeMs;
+          updatePerformanceProgress();
+          if (performanceUpdateTimer === undefined) {
+            performanceUpdateTimer = window.setTimeout(updateLiveResults, 250);
           }
-        }
-        if (!isCurrentOperation(operation)) return;
-        const toolCanceled =
-          typeof result.error !== "string" &&
-          result.error?.code === "tool_canceled";
-        const failure = toolCanceled
-          ? null
-          : resultIssue(result, t, {
-              title: "diagnostics.performance.errorTitle",
-              message: "diagnostics.performance.failure",
-              hint: "diagnostics.performance.errorHint",
-            });
-        const failureCategory =
-          result.error && typeof result.error !== "string"
-            ? result.error.code
-            : result.error
-              ? "network-error"
-              : "no-http-response";
-        const sampleFailureText = failure
-          ? [...new Set([failure.text, failure.technical].filter(Boolean))].join(
-              " · ",
-            )
-          : t("diagnostics.performance.sampleFailure");
-        if (
-          pendingPerformanceCancellationID === operationID ||
-          toolCanceled
-        ) {
-          if (!toolCanceled && result.report) {
-            const sampleFailed = failure || !result.report.finalStatusCode;
-            recordReport(
-              result.report,
-              sampleFailed ? sampleFailureText : undefined,
-              sampleFailed ? failureCategory : undefined,
-            );
-          }
-          recordElapsedTime();
-          pendingPerformanceCancellationID = undefined;
-          state.performanceCanceling = false;
-          invalidatePendingOperation();
-          state.notice = {
-            tone: "info",
-            text: t("diagnostics.performance.canceled"),
-          };
-          render();
-          return;
-        }
-        if (!result.report) {
-          recordElapsedTime();
-          state.performanceResult = summary ?? null;
-          state.notice =
-            failure ?? {
-              tone: "error",
-              title: t("diagnostics.performance.errorTitle"),
-              text: t("diagnostics.performance.failure"),
-              hint: t("diagnostics.performance.errorHint"),
-            };
-          return;
-        }
-        if (failure || !result.report.finalStatusCode) {
-          recordReport(
-            result.report,
-            sampleFailureText,
-            failureCategory,
-          );
-          continue;
-        }
-        recordReport(result.report);
-      }
-
+        },
+      });
+      performanceRun = run;
+      const result = await run.completion;
       if (!isCurrentOperation(operation)) return;
-      recordElapsedTime();
-      state.performanceResult = summary ?? null;
-      state.notice = summary?.failedSamples
-        ? {
-            tone: "info",
-            text: t("diagnostics.performance.completedWithErrors", {
-              count: summary.completedSamples,
-              failed: summary.failedSamples,
-            }),
-          }
-        : {
-            tone: "success",
-            text: t("diagnostics.performance.success", {
-              count: summary?.completedSamples ?? 0,
-            }),
-          };
+      state.performanceResult = result.summary ?? null;
+      state.performanceCompletedSamples = result.completedSamples;
+      state.performanceElapsedMs = result.elapsedTimeMs;
+      state.performanceActiveRequests = 0;
+      if (result.summary) {
+        state.performanceHistory = [{
+          id: `run-${Date.now()}-${operation.id}`, startedAt, url: targetURL,
+          summary: result.summary, options, sampleCount, timeoutMs, status: result.status,
+        }, ...state.performanceHistory].slice(0, 5);
+      }
+      state.notice = result.status === "canceled"
+        ? { tone: "info", text: t("diagnostics.performance.canceled") }
+        : result.summary?.failedSamples
+          ? { tone: "info", text: t("diagnostics.performance.completedWithErrors", {
+              count: result.completedSamples, failed: result.summary.failedSamples,
+            }) }
+          : { tone: "success", text: t("diagnostics.performance.success", { count: result.completedSamples }) };
     } catch (error) {
       if (isCurrentOperation(operation)) {
-        recordElapsedTime();
-        state.performanceResult = summary ?? null;
-        state.notice = bridgeIssue(
-          error,
-          t("diagnostics.performance.failure"),
-          t,
-        );
+        state.notice = bridgeIssue(error, t("diagnostics.performance.failure"), t);
       }
     } finally {
+      window.clearInterval(heartbeat);
       if (isCurrentOperation(operation)) {
-        pendingPerformanceCancellationID = undefined;
+        performanceRun = undefined;
         state.performanceCanceling = false;
-        performanceRunStartedAt = undefined;
+        if (performanceUpdateTimer !== undefined) window.clearTimeout(performanceUpdateTimer);
+        performanceUpdateTimer = undefined;
       }
       finishOperation(operation);
     }
   };
 
   const stopURLPerformanceTest = async () => {
-    const operationID = activePerformanceOperationID;
-    if (
-      state.busy !== "performance" ||
-      state.performanceCanceling ||
-      !operationID
-    ) {
-      return;
-    }
-    pendingPerformanceCancellationID = operationID;
+    const run = performanceRun;
+    if (state.busy !== "performance" || state.performanceCanceling || !run) return;
     state.performanceCanceling = true;
     state.notice = null;
     render();
     try {
-      const accepted = await backend.cancelToolOperation(operationID);
-      if (
-        disposed ||
-        state.busy !== "performance" ||
-        pendingPerformanceCancellationID !== operationID ||
-        activePerformanceOperationID !== operationID
-      ) {
-        return;
-      }
+      const accepted = await run.stop();
+      if (disposed || performanceRun !== run || state.busy !== "performance") return;
       if (!accepted) {
-        pendingPerformanceCancellationID = undefined;
         state.performanceCanceling = false;
-        recordCurrentPerformanceElapsedTime();
         state.notice = {
           tone: "error",
           title: t("diagnostics.performance.cancelRejectedTitle"),
@@ -3305,37 +3278,53 @@ function mountDiagnosticsWorkspace(
           hint: t("diagnostics.performance.cancelRejectedHint"),
         };
         render();
-        return;
       }
-      recordCurrentPerformanceElapsedTime();
-      activePerformanceOperationID = undefined;
-      pendingPerformanceCancellationID = undefined;
-      state.performanceCanceling = false;
-      invalidatePendingOperation();
-      state.notice = {
-        tone: "info",
-        text: t("diagnostics.performance.canceled"),
-      };
-      render();
     } catch (error) {
-      if (
-        disposed ||
-        state.busy !== "performance" ||
-        pendingPerformanceCancellationID !== operationID ||
-        activePerformanceOperationID !== operationID
-      ) {
-        return;
-      }
-      pendingPerformanceCancellationID = undefined;
+      if (disposed || performanceRun !== run || state.busy !== "performance") return;
       state.performanceCanceling = false;
-      recordCurrentPerformanceElapsedTime();
-      state.notice = bridgeIssue(
-        error,
-        t("diagnostics.performance.cancelFailure"),
-        t,
-      );
+      state.notice = bridgeIssue(error, t("diagnostics.performance.cancelFailure"), t);
       render();
     }
+  };
+
+  const exportPerformance = (format: "json" | "csv") => {
+    const summary = state.performanceResult;
+    if (!summary) return;
+    const metadata = { url: state.performanceURL, startedAt: state.performanceStartedAt };
+    const contents = format === "json"
+      ? JSON.stringify({
+          ...JSON.parse(performanceExportJSON(summary, state.performanceOptions, metadata)),
+          configuration: {
+            url: state.performanceURL, sampleCount: state.performanceSampleCount,
+            timeoutMs: state.performanceTimeout, ...state.performanceOptions,
+          },
+          partial: state.busy === "performance" || summary.completedSamples < state.performanceSampleCount,
+        }, null, 2)
+      : performanceExportCSV(summary);
+    const url = URL.createObjectURL(new Blob([contents], {
+      type: format === "json" ? "application/json;charset=utf-8" : "text/csv;charset=utf-8",
+    }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `validex-performance-${new Date().toISOString().replace(/[:.]/g, "-")}.${format}`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    state.notice = { tone: "success", text: t("performance.controls.downloaded") };
+    render();
+  };
+
+  const copyPerformanceSummary = async () => {
+    if (!state.performanceResult) return;
+    const copied = await copyText(performanceSummaryText(
+      state.performanceResult, state.performanceOptions,
+      { url: state.performanceURL, startedAt: state.performanceStartedAt },
+    ));
+    if (disposed) return;
+    state.notice = { tone: copied ? "success" : "error", text: t(copied
+      ? "performance.controls.copied" : "performance.controls.copyFailed") };
+    render();
   };
 
   const compareEnvironments = async () => {
@@ -3638,6 +3627,17 @@ function mountDiagnosticsWorkspace(
     if (!control) return;
     let shouldRender = false;
 
+    if (control.startsWith("performance-option-")) {
+      if (state.busy) return;
+      const key = control.slice("performance-option-".length) as keyof PerformanceOptions;
+      if (!Object.prototype.hasOwnProperty.call(performanceOptionLabels, key)) return;
+      state.performanceOptions = { ...state.performanceOptions, [key]: Number(element.value) };
+      state.performanceProfile = "custom";
+      if (key !== "p95TargetMs" && key !== "errorBudgetPercent") clearPerformanceInputResult();
+      if (event.type === "change") render();
+      return;
+    }
+
     switch (control) {
       case "spring-body":
         shouldRender = Boolean(state.springAnalysis || state.notice);
@@ -3692,21 +3692,38 @@ function mountDiagnosticsWorkspace(
         }
         break;
       case "performance-url":
+        if (state.busy) return;
         state.performanceURL = element.value;
         shouldRender = clearPerformanceInputResult();
         break;
       case "performance-timeout": {
+        if (state.busy) return;
         const timeout = Number(element.value);
         state.performanceTimeout = Number.isFinite(timeout) ? timeout : 0;
-        shouldRender = clearPerformanceInputResult();
+        state.performanceProfile = "custom";
+        shouldRender = clearPerformanceInputResult() || event.type === "change";
         break;
       }
       case "performance-samples": {
+        if (state.busy) return;
         const samples = Number(element.value);
         state.performanceSampleCount = Number.isFinite(samples) ? samples : 0;
-        shouldRender = clearPerformanceInputResult();
+        state.performanceProfile = "custom";
+        shouldRender = clearPerformanceInputResult() || event.type === "change";
         break;
       }
+      case "performance-filter":
+        if (["all", "errors", "slow"].includes(element.value)) {
+          state.performanceFilter = element.value as PerformanceSampleFilter;
+          shouldRender = true;
+        }
+        break;
+      case "performance-order":
+        if (["original", "slowest", "fastest"].includes(element.value)) {
+          state.performanceOrder = element.value as PerformanceSampleOrder;
+          shouldRender = true;
+        }
+        break;
       case "environment-method":
         state.environmentMethod = element.value;
         if (isSafeEnvironmentMethod(element.value)) {
@@ -3867,11 +3884,31 @@ function mountDiagnosticsWorkspace(
     },
   );
 
+  delegate(lifecycle, root, "click", "[data-performance-history]", (_event, element) => {
+    if (state.busy) return;
+    const run = state.performanceHistory.find((entry) => entry.id === element.dataset.performanceHistory);
+    if (!run) return;
+    state.performanceURL = run.url;
+    state.performanceStartedAt = run.startedAt;
+    state.performanceTimeout = run.timeoutMs;
+    state.performanceSampleCount = run.sampleCount;
+    state.performanceOptions = { ...run.options };
+    state.performanceProfile = "custom";
+    state.performanceResult = run.summary;
+    state.performanceCompletedSamples = run.summary.completedSamples;
+    state.performanceElapsedMs = run.summary.elapsedTimeMs ?? 0;
+    state.performanceFilter = "all";
+    state.performanceOrder = "original";
+    state.notice = { tone: "info", text: t("performance.controls.loadedRun") };
+    render();
+  });
+
   lifecycle.listen(root, "click", (event) => {
-    const action = eventElement<HTMLElement>(
+    const element = eventElement<HTMLElement>(
       event,
       "[data-diagnostics-action]",
-    )?.dataset.diagnosticsAction;
+    );
+    const action = element?.dataset.diagnosticsAction;
     switch (action) {
       case "load-active-response":
         loadActiveResponse();
@@ -3901,6 +3938,51 @@ function mountDiagnosticsWorkspace(
         break;
       case "performance-stop":
         void stopURLPerformanceTest();
+        break;
+      case "performance-profile": {
+        if (state.busy) break;
+        const preset = performancePresets.find((item) => item.id === element?.dataset.performanceProfile);
+        if (!preset) break;
+        clearPerformanceInputResult();
+        state.performanceProfile = preset.id;
+        state.performanceSampleCount = preset.sampleCount;
+        state.performanceTimeout = preset.timeoutMs;
+        state.performanceOptions = { ...preset.options };
+        render();
+        break;
+      }
+      case "performance-from-request": {
+        if (state.busy) break;
+        const url = activeRequest()?.url;
+        if (!url?.trim()) {
+          showValidationError(t("performance.controls.noRequest"));
+          break;
+        }
+        clearPerformanceInputResult();
+        state.performanceURL = url;
+        render();
+        break;
+      }
+      case "performance-baseline":
+        if (state.performanceResult) {
+          state.performanceBaseline = state.performanceResult;
+          state.notice = { tone: "success", text: t("performance.controls.savedBaseline") };
+          render();
+        }
+        break;
+      case "performance-clear-baseline":
+        state.performanceBaseline = null;
+        state.notice = { tone: "info", text: t("performance.controls.clearedBaseline") };
+        render();
+        break;
+      case "performance-export-json":
+        exportPerformance("json");
+        break;
+      case "performance-export-csv":
+        exportPerformance("csv");
+        break;
+      case "performance-copy-summary":
+        void copyPerformanceSummary();
         break;
       case "compare-environments":
         void compareEnvironments();

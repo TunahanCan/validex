@@ -13,6 +13,9 @@ import {
 } from "../.typescript-build/esm/native/workspaces.js";
 
 test("workspace registry is the canonical ordered catalog", () => {
+  assert.deepEqual(workspaceViews, [
+    "requests", "mock", "json", "diagnostics", "performance",
+  ]);
   assert.deepEqual(
     workspaceDefinitions.map((definition) => definition.id),
     workspaceViews,
@@ -36,6 +39,11 @@ test("workspace guards reject persisted and DOM values outside the registry", ()
   assert.equal(isWorkspaceView("performance"), true);
   assert.equal(isWorkspaceView("unknown"), false);
   assert.equal(isWorkspaceView(null), false);
+  for (const removed of ["protocols", "automation"]) {
+    assert.equal(isWorkspaceView(removed), false);
+    assert.equal(isToolWorkspaceView(removed), false);
+    assert.throws(() => workspaceDefinition(removed), /Unknown workspace/);
+  }
   assert.equal(isToolWorkspaceView("requests"), false);
   assert.equal(isToolWorkspaceView("mock"), true);
   assert.equal(isToolWorkspaceView("unknown"), false);

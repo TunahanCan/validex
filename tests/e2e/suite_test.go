@@ -34,6 +34,7 @@ func TestFeatures(t *testing.T) {
 			registerMockSteps(context, world)
 			registerJSONSteps(context, world)
 			registerDiagnosticsSteps(context, world)
+			registerPerformanceWorkbenchSteps(context, world)
 			registerProtocolAutomationSteps(context, world)
 			registerResponsiveSteps(context, world)
 			registerStorageResilienceSteps(context, world)

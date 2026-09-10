@@ -10,8 +10,6 @@ export const workspaceViews = [
   "json",
   "diagnostics",
   "performance",
-  "protocols",
-  "automation",
 ] as const;
 export type WorkspaceView = (typeof workspaceViews)[number];
 

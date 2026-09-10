@@ -22,8 +22,6 @@ Feature: Navigate the Validex application shell
       | JSON        | JSON Lab           |
       | Diagnostics | Diagnostics        |
       | Performance | Performance        |
-      | Protocols   | SSE Stream         |
-      | Automation  | Automation         |
 
   @palette @keyboard
   Scenario: Find and run a command from the command palette

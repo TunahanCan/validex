@@ -12,7 +12,7 @@
   "scripts": {
     "frontend:typecheck": "node frontend/scripts/typecheck.mjs",
     "frontend:build": "node frontend/scripts/build.mjs",
-    "frontend:test": "npm run frontend:build && cd frontend && node --test",
+    "frontend:test": "npm run frontend:build && node frontend/scripts/run-unit-suite.mjs",
     "frontend:dev": "node frontend/scripts/dev.mjs --host 127.0.0.1 --port 34116",
     "electron:typecheck": "tsc -p electron/tsconfig.json --noEmit",
     "electron:build": "tsc -p electron/tsconfig.json",

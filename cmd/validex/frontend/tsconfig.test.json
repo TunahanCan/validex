@@ -1,7 +1,4 @@
 {
   "extends": "./tsconfig.typescript-only.json",
-  "compilerOptions": {
-    "noEmit": true
-  },
   "include": ["src/**/*.ts"]
 }

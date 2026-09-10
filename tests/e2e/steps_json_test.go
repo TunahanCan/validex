@@ -18,6 +18,7 @@ const (
 )
 
 func registerJSONSteps(context *godog.ScenarioContext, world *browserWorld) {
+	registerJSONPaletteSteps(context, world)
 	context.Step(
 		`^I open the "([^"]+)" JSON Lab mode$`,
 		world.jsonOpenMode,

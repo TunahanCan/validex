@@ -70,8 +70,8 @@ func (w *browserWorld) allWorkspaceEntriesAreRendered() error {
 	); err != nil {
 		return err
 	}
-	if count != 7 {
-		return fmt.Errorf("workspace navigation entries = %d, want 7", count)
+	if count != 5 {
+		return fmt.Errorf("workspace navigation entries = %d, want 5", count)
 	}
 	return nil
 }

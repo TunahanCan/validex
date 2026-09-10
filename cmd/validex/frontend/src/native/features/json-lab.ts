@@ -31,6 +31,14 @@ import {
   type JSONInputGroup,
   type JSONMode,
 } from "../../features/json-lab/model.js";
+import {
+  getJSONPalette,
+  isJSONPalette,
+  jsonPalettes,
+  setJSONPalette,
+  type JSONPalette,
+} from "../../features/json-lab/palette.js";
+import { tokenizeResponseBody } from "../../features/requests/model/responsePresentation.js";
 import { copyText } from "../clipboard.js";
 
 interface JSONNotice {
@@ -40,6 +48,7 @@ interface JSONNotice {
 
 interface JSONLabState {
   mode: JSONMode;
+  palette: JSONPalette;
   inputs: Record<JSONInputGroup, string>;
   compareInput: string;
   ignorePaths: string;
@@ -92,10 +101,12 @@ function modeDefinitions(): readonly JSONModeDefinition[] {
   ];
 }
 
-function printable(value: unknown): string {
-  if (value === undefined) return "—";
-  if (typeof value === "string") return value;
-  return JSON.stringify(value) ?? "—";
+function printable(value: unknown): TrustedHTMLFragment {
+  if (value === undefined) return html`—`;
+  if (typeof value === "string") {
+    return html`<span class="json-syntax-string">${value}</span>`;
+  }
+  return highlightedJSON(JSON.stringify(value) ?? "—");
 }
 
 function localizedJSONError(error: unknown, translate: Translate): string {
@@ -191,15 +202,83 @@ function differenceList(
   `;
 }
 
+function highlightedJSON(source: string): TrustedHTMLFragment {
+  const { tokens } = tokenizeResponseBody(source, "json");
+  return html`${tokens.map(
+    (token) => html`<span class="json-syntax-${token.kind}">${token.text}</span>`,
+  )}`;
+}
+
+function codeEditor(
+  value: string,
+  attributes: TrustedHTMLFragment,
+): TrustedHTMLFragment {
+  return html`<div class="json-code-editor">
+    <pre class="tool-code-input json-code-highlight" aria-hidden="true">${highlightedJSON(value)}${"\n"}</pre>
+    <textarea
+      class="tool-code-input json-code-textarea"
+      wrap="off"
+      spellcheck="false"
+      ${attributes}
+    >${"\n"}${value}</textarea>
+  </div>`;
+}
+
+function syncEditorScroll(editor: HTMLTextAreaElement): void {
+  const highlight = editor.parentElement?.querySelector<HTMLElement>(
+    ".json-code-highlight",
+  );
+  if (!highlight) return;
+  // Match the text viewport even when native scrollbars occupy space.
+  highlight.style.width = `${editor.clientWidth}px`;
+  highlight.style.height = `${editor.clientHeight}px`;
+  highlight.scrollTop = editor.scrollTop;
+  highlight.scrollLeft = editor.scrollLeft;
+}
+
+function syncEditors(root: HTMLElement): void {
+  root.querySelectorAll<HTMLTextAreaElement>(".json-code-textarea")
+    .forEach(syncEditorScroll);
+}
+
+function updateEditorHighlight(editor: HTMLTextAreaElement): void {
+  const highlight = editor.parentElement?.querySelector<HTMLElement>(
+    ".json-code-highlight",
+  );
+  if (!highlight) return;
+  setHTML(highlight, html`${highlightedJSON(editor.value)}${"\n"}`);
+  syncEditorScroll(editor);
+}
+
+function palettePicker(palette: JSONPalette): TrustedHTMLFragment {
+  return html`
+    <div class="json-palette-picker" role="group" aria-label="${t("json.palette.label")}">
+      <span class="json-palette-label">${t("json.palette.label")}</span>
+      ${jsonPalettes.map((option) => html`
+        <label class="json-palette-option" data-json-palette="${option.id}">
+          <input
+            type="radio"
+            name="json-palette"
+            data-json-control="palette"
+            value="${option.id}"
+            ${palette === option.id ? html`checked` : null}
+          />
+          <span class="json-palette-swatches" aria-hidden="true">
+            <i data-json-swatch="key"></i>
+            <i data-json-swatch="string"></i>
+            <i data-json-swatch="number"></i>
+            <i data-json-swatch="literal"></i>
+          </span>
+          <span>${option.label}</span>
+        </label>
+      `)}
+    </div>
+  `;
+}
+
 function resultContent(result: string): TrustedHTMLFragment {
   if (result) {
-    return html`
-      <textarea
-        class="tool-code-input"
-        readonly
-        aria-label="${t("json.result.aria")}"
-      >${result}</textarea>
-    `;
+    return codeEditor(result, html`readonly aria-label="${t("json.result.aria")}"`);
   }
   return html`
     <div class="tool-empty-result">
@@ -322,14 +401,21 @@ function inputCard(
         </button>
       </header>
       ${actions}
-      <textarea
-        class="tool-code-input"
+      ${dto ? html`
+        <textarea
+          class="tool-code-input"
+          data-json-control="source"
+          placeholder="${placeholder}"
+          spellcheck="false"
+          aria-label="${inputLabel}"
+          aria-describedby="json-mode-guidance"
+        >${input}</textarea>
+      ` : codeEditor(input, html`
         data-json-control="source"
         placeholder="${placeholder}"
-        spellcheck="false"
         aria-label="${inputLabel}"
         aria-describedby="json-mode-guidance"
-      >${input}</textarea>
+      `)}
     </div>
   `;
 }
@@ -344,16 +430,11 @@ function secondaryCard(state: JSONLabState): TrustedHTMLFragment {
             <span>${t("json.diff.targetDescription")}</span>
           </div>
         </header>
-        <textarea
-          class="tool-code-input"
+        ${codeEditor(state.compareInput, html`
           data-json-control="compare"
-          placeholder='{
-  "id": 42,
-  "status": "DISABLED"
-}'
-          spellcheck="false"
+          placeholder="${'{\n  "id": 42,\n  "status": "DISABLED"\n}'}"
           aria-label="${t("json.diff.targetAria")}"
-        >${state.compareInput}</textarea>
+        `)}
         <div class="tool-diff-options">
           <label>
             ${t("json.diff.ignore")}
@@ -415,7 +496,8 @@ function renderPage(root: HTMLElement, state: JSONLabState): void {
     root,
     html`
       <section
-        class="tool-page"
+        class="tool-page json-lab-page"
+        data-json-palette="${state.palette}"
         aria-labelledby="json-lab-title"
       >
         <header class="tool-page-header">
@@ -468,6 +550,8 @@ function renderPage(root: HTMLElement, state: JSONLabState): void {
             `,
           )}
 
+        ${palettePicker(state.palette)}
+
         <p class="tool-mode-guidance" id="json-mode-guidance">
           ${activeMode.description}
         </p>
@@ -490,6 +574,7 @@ function renderPage(root: HTMLElement, state: JSONLabState): void {
       </section>
     `,
   );
+  syncEditors(root);
 }
 
 function updateDerivedRegions(root: HTMLElement, state: JSONLabState): void {
@@ -528,6 +613,7 @@ function updateDerivedRegions(root: HTMLElement, state: JSONLabState): void {
       `,
     );
   }
+  syncEditors(root);
 }
 
 function updateInputSize(root: HTMLElement, state: JSONLabState): void {
@@ -549,6 +635,7 @@ export function mountJSONLab(root: HTMLElement): Disposable {
   const lifecycle = new Lifecycle();
   const state: JSONLabState = {
     mode: "format",
+    palette: getJSONPalette(),
     inputs: {
       json: "",
       diff: "",
@@ -666,6 +753,15 @@ export function mountJSONLab(root: HTMLElement): Disposable {
     const control = element.dataset.jsonControl;
     if (!control) return;
 
+    if (control === "palette") {
+      if (isJSONPalette(element.value)) {
+        state.palette = element.value;
+        setJSONPalette(state.palette);
+        requiredElement<HTMLElement>(root, ".json-lab-page").dataset.jsonPalette = state.palette;
+      }
+      return;
+    }
+
     if (control === "source") {
       state.inputs[inputGroupForMode(state.mode)] = element.value;
       clearDerived();
@@ -680,11 +776,20 @@ export function mountJSONLab(root: HTMLElement): Disposable {
       state.path = element.value;
       clearDerived();
     }
+    if (element instanceof HTMLTextAreaElement) updateEditorHighlight(element);
     updateDerivedRegions(root, state);
   };
 
   lifecycle.listen(root, "input", handleControl);
   lifecycle.listen(root, "change", handleControl);
+  lifecycle.listen(root, "scroll", (event) => {
+    if (event.target instanceof HTMLTextAreaElement) syncEditorScroll(event.target);
+  }, true);
+  if (typeof ResizeObserver !== "undefined") {
+    const editorResizeObserver = new ResizeObserver(() => syncEditors(root));
+    editorResizeObserver.observe(root);
+    lifecycle.add(() => editorResizeObserver.disconnect());
+  }
 
   delegate(lifecycle, root, "click", "[data-json-mode]", (_event, element) => {
     const mode = element.dataset.jsonMode as JSONMode | undefined;
@@ -720,7 +825,10 @@ export function mountJSONLab(root: HTMLElement): Disposable {
           root,
           '[data-json-control="source"]',
         );
-        if (source) source.value = "";
+        if (source) {
+          source.value = "";
+          updateEditorHighlight(source);
+        }
         updateInputSize(root, state);
         updateDerivedRegions(root, state);
         source?.focus({ preventScroll: true });
