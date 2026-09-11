@@ -26,6 +26,9 @@ import {
   rebrandMacApplication,
   verifyMacApplicationIdentity,
 } from "./mac-application-identity.mjs";
+import { developmentRuntimeMarkerSchema, readApplicationIdentity } from "./application-build-identity.mjs";
+import { signMacApplication } from "./mac-application-signing.mjs";
+import { stampWindowsExecutable } from "./windows-application-identity.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const applicationRoot = resolve(scriptDirectory, "..");
@@ -34,10 +37,11 @@ const buildRoot = join(applicationRoot, "build");
 const outputRoot = join(buildRoot, "bin");
 const developmentOutputRoot = join(buildRoot, "dev");
 
-const applicationName = "Validex";
-const applicationID = "com.validex.Validex";
+const productIdentity = await readApplicationIdentity();
+const applicationName = productIdentity.applicationName;
+const applicationID = productIdentity.applicationID;
 const developmentApplicationID = `${applicationID}.dev`;
-const developmentRuntimeMarkerSchema = 2;
+const signingIdentity = process.env.VALIDEX_CODESIGN_IDENTITY || "-";
 const applicationManifest = JSON.parse(
   await readFile(join(applicationRoot, "package.json"), "utf8"),
 );
@@ -202,11 +206,16 @@ async function copyApplicationFiles(applicationPath) {
     [join(shellOutput, "banner.js"), "Electron startup banner"],
     [join(shellOutput, "bridge.js"), "Electron bridge catalog"],
     [join(shellOutput, "identity.js"), "Electron application identity"],
+    [join(shellOutput, "clipboard.js"), "Electron clipboard support"],
+    [join(shellOutput, "graphics.js"), "Electron graphics compatibility"],
+    [join(shellOutput, "security-identity.js"), "Electron identity report"],
     [join(shellOutput, "sidecar.js"), "Electron sidecar client"],
     [join(frontendOutput, "index.html"), "frontend artifact"],
     [join(frontendOutput, "appicon.png"), "desktop PNG icon"],
     [join(frontendOutput, "appicon.svg"), "desktop SVG icon"],
     [backend, "Go backend"],
+    [join(outputRoot, "application-identity.json"), "application identity manifest"],
+    [join(outputRoot, "application-build.json"), "application build metadata"],
     [notices, "third-party notices"],
     [join(electronDistribution, "LICENSE"), "Electron license"],
     [
@@ -215,6 +224,15 @@ async function copyApplicationFiles(applicationPath) {
     ],
   ]) {
     await requireRegularFile(path, label);
+  }
+  const buildMetadata = JSON.parse(await readFile(join(outputRoot, "application-build.json"), "utf8"));
+  if (buildMetadata.version !== applicationVersion || buildMetadata.platform !== process.platform ||
+      buildMetadata.architecture !== process.arch) {
+    throw new Error("Backend build metadata does not match this Electron package; rebuild the backend for this platform");
+  }
+  const builtIdentity = JSON.parse(await readFile(join(outputRoot, "application-identity.json"), "utf8"));
+  if (JSON.stringify(builtIdentity) !== JSON.stringify(productIdentity)) {
+    throw new Error("Backend identity manifest is outdated; rebuild the backend");
   }
 
   await rm(join(resources, "default_app.asar"), { force: true });
@@ -240,6 +258,9 @@ async function copyApplicationFiles(applicationPath) {
     "banner.js",
     "bridge.js",
     "identity.js",
+    "clipboard.js",
+    "graphics.js",
+    "security-identity.js",
     "sidecar.js",
   ]) {
     await cp(
@@ -254,6 +275,8 @@ async function copyApplicationFiles(applicationPath) {
     recursive: true,
   });
   await cp(backend, join(resources, executableName()));
+  await cp(join(outputRoot, "application-identity.json"), join(resources, "application-identity.json"));
+  await cp(join(outputRoot, "application-build.json"), join(resources, "application-build.json"));
   if (process.platform !== "win32") {
     await chmod(join(resources, executableName()), 0o755);
   }
@@ -331,7 +354,8 @@ async function developmentRuntimeIsCurrent(applicationPath, version) {
       marker.applicationVersion !== applicationVersion ||
       marker.architecture !== process.arch ||
       marker.platform !== process.platform ||
-      marker.electronVersion !== version
+      marker.electronVersion !== version ||
+      marker.signingIdentity !== signingIdentity
     ) {
       return false;
     }
@@ -351,19 +375,6 @@ async function developmentRuntimeIsCurrent(applicationPath, version) {
   } catch {
     return false;
   }
-}
-
-function signDevelopmentRuntime(applicationPath) {
-  execFileSync(
-    "codesign",
-    ["--force", "--deep", "--sign", "-", applicationPath],
-    { stdio: "inherit" },
-  );
-  execFileSync(
-    "codesign",
-    ["--verify", "--deep", "--strict", applicationPath],
-    { stdio: "inherit" },
-  );
 }
 
 async function packageDevelopmentRuntime() {
@@ -420,6 +431,7 @@ async function packageDevelopmentRuntime() {
           electronVersion: version,
           platform: process.platform,
           schema: developmentRuntimeMarkerSchema,
+          signingIdentity,
         },
         null,
         2,
@@ -432,12 +444,13 @@ async function packageDevelopmentRuntime() {
       bundleIdentifier: developmentApplicationID,
       version: applicationVersion,
     });
+    await signMacApplication({ applicationPath: stagingApplication, applicationName,
+      bundleIdentifier: developmentApplicationID, signingIdentity });
     await rm(outputApplication, { force: true, recursive: true });
     await rename(stagingApplication, outputApplication);
   } finally {
     await rm(stagingRoot, { force: true, recursive: true });
   }
-  signDevelopmentRuntime(outputApplication);
   process.stdout.write(
     `Prepared branded ${applicationName} development runtime with Electron ${version}: ${outputApplication}\n`,
   );
@@ -479,6 +492,16 @@ async function packageApplication() {
       });
     }
     await chmod(packageExecutablePath(stagingApplication), 0o755);
+    if (process.platform === "darwin") {
+      await signMacApplication({ applicationPath: stagingApplication, applicationName,
+        bundleIdentifier: applicationID, signingIdentity,
+        backendPath: join(packageResourcesPath(stagingApplication), executableName()),
+        backendIdentifier: applicationID });
+    } else if (process.platform === "win32") {
+      const metadata = JSON.parse(await readFile(join(outputRoot, "application-build.json"), "utf8"));
+      await stampWindowsExecutable({ executable: packageExecutablePath(stagingApplication),
+        component: "desktop", identity: productIdentity, metadata });
+    }
     await rm(outputApplication, { force: true, recursive: true });
     await rename(stagingApplication, outputApplication);
   } finally {

@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 export const applicationID = "com.validex.Validex";
 export const applicationName = "Validex";
 export const developmentApplicationID = `${applicationID}.dev`;
-export const developmentRuntimeMarkerSchema = 2;
+export const developmentRuntimeMarkerSchema = 3;
 
 export interface ApplicationIconLocation {
   applicationRoot: string;

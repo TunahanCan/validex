@@ -5,11 +5,18 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"validex/internal/appidentity"
 	"validex/internal/cli"
 )
 
 func main() {
+	if handled, exitCode := appidentity.HandleCommand(
+		os.Args[1:], appidentity.CLI, time.Now().UTC(), os.Stdout, os.Stderr,
+	); handled {
+		os.Exit(exitCode)
+	}
 	ctx, stop := signal.NotifyContext(
 		context.Background(),
 		os.Interrupt,

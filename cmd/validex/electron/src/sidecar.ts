@@ -86,6 +86,10 @@ function asResponse(value: unknown): SidecarResponse {
 
 export class SidecarClient {
   private child: ChildProcessWithoutNullStreams | undefined;
+
+  get processID(): number | undefined {
+    return this.child?.pid;
+  }
   private readonly frameHeader = Buffer.allocUnsafe(frameHeaderBytes);
   private frameHeaderOffset = 0;
   private framePayload: Buffer | undefined;

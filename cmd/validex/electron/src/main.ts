@@ -8,7 +8,9 @@ import {
   nativeImage,
   protocol,
   session,
+  shell,
   type IpcMainInvokeEvent,
+  type MenuItemConstructorOptions,
   type NativeImage,
 } from "electron";
 import { readFileSync } from "node:fs";
@@ -37,6 +39,12 @@ import {
   isPackagedApplicationRuntime,
 } from "./identity";
 import { SidecarClient } from "./sidecar";
+import {
+  collectApplicationIdentity,
+  identityTicketText,
+  persistApplicationIdentity,
+  type ApplicationIdentityReport,
+} from "./security-identity";
 
 applyApplicationProcessIdentity(process);
 configureGraphicsCompatibility(app);
@@ -70,6 +78,107 @@ let mainWindow: BrowserWindow | undefined;
 let sidecar: SidecarClient | undefined;
 let shutdownStarted = false;
 let shutdownComplete = false;
+let applicationIdentity: ApplicationIdentityReport | undefined;
+
+function identityLogDirectory(): string {
+  return join(app.getPath("appData"), applicationName, "logs");
+}
+
+async function saveIdentity(appendStartup = false): Promise<void> {
+  if (!applicationIdentity) return;
+  try {
+    await persistApplicationIdentity(applicationIdentity, appendStartup);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? "unavailable";
+    applicationIdentity.diagnosticErrors.push(`Identity log files could not be written: ${code}`);
+    process.stderr.write(`[validex.identity] Log files unavailable (${code}); the report can still be copied from Help.\n`);
+  }
+}
+
+async function initializeIdentity(backend: string): Promise<void> {
+  const packaged = packagedApplication();
+  const root = app.getAppPath();
+  const binaryRoot = packaged ? process.resourcesPath : join(root, "build", "bin");
+  applicationIdentity = await collectApplicationIdentity({
+    manifestPath: packaged
+      ? join(process.resourcesPath, "application-identity.json")
+      : resolve(root, "..", "..", "internal", "appidentity", "manifest.json"),
+    buildMetadataPath: join(binaryRoot, "application-build.json"),
+    desktopPath: process.execPath,
+    backendPath: backend,
+    cliPath: join(binaryRoot, process.platform === "win32" ? "validex-cli.exe" : "validex-cli"),
+    entryPath: __filename,
+    logDirectory: identityLogDirectory(),
+    version: app.getVersion(), packaged,
+    electronVersion: process.versions.electron,
+    chromiumVersion: process.versions.chrome,
+  });
+  // Collect before starting the child so a launch rejection still leaves a report.
+  await saveIdentity();
+}
+
+async function openIdentityLogs(): Promise<void> {
+  await saveIdentity();
+  const error = await shell.openPath(identityLogDirectory());
+  if (error) dialog.showErrorBox(applicationName, error);
+}
+
+async function showIdentity(): Promise<void> {
+  if (!applicationIdentity) return;
+  const tr = app.getLocale().toLowerCase().startsWith("tr");
+  const backend = applicationIdentity.artifacts.find((artifact) => artifact.component === "backend");
+  const result = await dialog.showMessageBox({
+    type: "info", title: tr ? "Uygulama kimliği" : "Application identity",
+    message: `${applicationName} · ${applicationID}`,
+    detail: [
+      `Product UUID: ${applicationIdentity.productUUID ?? "unavailable"}`,
+      `Version: ${applicationIdentity.version} (${applicationIdentity.revision})`,
+      `${applicationIdentity.platform}/${applicationIdentity.architecture} · ${applicationIdentity.mode}`,
+      "",
+      `Backend: ${backend?.path ?? "unavailable"}`,
+      `SHA-256: ${backend?.sha256 ?? "unavailable"}`,
+      `Signature: ${backend?.signature.status ?? "unavailable"}`,
+      "",
+      tr ? "Tam raporu kopyalayıp güvenlik talebine ekleyebilirsiniz." : "Copy the full report to attach it to your security registration ticket.",
+      applicationIdentity.logDirectory,
+    ].join("\n"),
+    buttons: tr ? ["Raporu kopyala", "Günlükleri aç", "Kapat"] : ["Copy report", "Open logs", "Close"],
+    defaultId: 0, cancelId: 2, noLink: true,
+  });
+  if (result.response === 0 && applicationIdentity) clipboard.writeText(identityTicketText(applicationIdentity));
+  if (result.response === 1) await openIdentityLogs();
+}
+
+function installApplicationMenu(): void {
+  const tr = app.getLocale().toLowerCase().startsWith("tr");
+  const runMenuAction = (action: () => Promise<void>) => {
+    void action().catch(() => dialog.showErrorBox(applicationName,
+      tr ? "Kimlik raporu açılamadı. Günlük dosyalarını kontrol edin." : "The identity report could not be opened. Check the log files."));
+  };
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
+    { role: "editMenu" },
+    {
+      label: tr ? "Yardım" : "Help",
+      submenu: [
+        {
+          label: tr ? "Uygulama kimliği" : "Application identity",
+          accelerator: "CmdOrCtrl+Shift+F12",
+          click: () => runMenuAction(showIdentity),
+        },
+        {
+          label: tr ? "Kimlik raporunu kopyala" : "Copy identity report",
+          click: () => { if (applicationIdentity) clipboard.writeText(identityTicketText(applicationIdentity)); },
+        },
+        {
+          label: tr ? "Günlükler klasörünü aç" : "Open logs folder",
+          click: () => runMenuAction(openIdentityLogs),
+        },
+      ],
+    },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 function commandLineValue(name: string): string | undefined {
   const exact = `--${name}`;
@@ -371,7 +480,6 @@ async function createWindow(
   });
   mainWindow = window;
 
-  window.setMenu(null);
   window.setMenuBarVisibility(false);
 
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
@@ -405,7 +513,7 @@ function loadApplicationIcon(path: string): NativeImage {
 
 async function startApplication(): Promise<void> {
   const devURL = developmentURL();
-  Menu.setApplicationMenu(null);
+  installApplicationMenu();
   if (process.platform === "darwin") {
     app.setAboutPanelOptions({
       applicationName,
@@ -440,8 +548,16 @@ async function startApplication(): Promise<void> {
   app.on("did-become-active", reinforceDockIcon);
 
   const backend = backendExecutable();
+  await initializeIdentity(backend);
   sidecar = new SidecarClient();
-  await sidecar.start(backend);
+  try {
+    await sidecar.start(backend);
+  } finally {
+    const backendIdentity = applicationIdentity?.artifacts.find((artifact) => artifact.component === "backend");
+    if (backendIdentity) backendIdentity.pid = sidecar.processID;
+    await saveIdentity(true);
+    process.stderr.write(`[validex.identity] ${JSON.stringify(applicationIdentity)}\n`);
+  }
   await createWindow(devURL, icon);
   // Reinforce the artwork after the first native window lifecycle boundary.
   reinforceDockIcon();
@@ -468,7 +584,9 @@ async function startApplication(): Promise<void> {
 function reportFatalError(error: unknown): void {
   const message =
     error instanceof Error ? error.message : "Validex could not be started";
-  dialog.showErrorBox("Validex", message);
+  dialog.showErrorBox("Validex", applicationIdentity
+    ? `${message}\n\nApplication identity: ${applicationID}\nReport: ${join(applicationIdentity.logDirectory, "application-identity.txt")}`
+    : message);
   app.quit();
 }
 

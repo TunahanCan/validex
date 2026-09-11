@@ -33,12 +33,10 @@ $(NPM_STAMP): $(APP_DIR)/package.json $(APP_DIR)/package-lock.json
 	touch $(NPM_STAMP)
 
 build-backend:
-	mkdir -p $(BUILD_DIR)
-	go build -o $(BACKEND_BINARY) ./$(BACKEND_DIR)
+	node $(APP_DIR)/scripts/build-go.mjs backend
 
 build-cli:
-	mkdir -p $(BUILD_DIR)
-	go build -o $(CLI_BINARY) ./$(CLI_DIR)
+	node $(APP_DIR)/scripts/build-go.mjs cli
 
 dev: deps build-backend
 	cd $(APP_DIR) && $(NPM) run electron:build
@@ -89,10 +87,6 @@ ifeq ($(HOST_GOOS),darwin)
 	node $(APP_DIR)/scripts/build-mac-icon.mjs
 endif
 	node $(APP_DIR)/scripts/package-electron.mjs
-ifeq ($(HOST_GOOS),darwin)
-	codesign --force --deep --sign - "$(BUILD_DIR)/Validex.app"
-	codesign --verify --deep --strict "$(BUILD_DIR)/Validex.app"
-endif
 
 install-linux: build
 ifeq ($(HOST_GOOS),linux)
@@ -134,7 +128,7 @@ endif
 
 test: deps
 	cd $(APP_DIR) && $(NPM) run electron:typecheck && $(NPM) run electron:test
-	cd $(FRONTEND_DIR) && node scripts/typecheck.mjs && node scripts/build.mjs && node --test
+	cd $(APP_DIR) && $(NPM) run frontend:typecheck && $(NPM) run frontend:test
 	go test ./...
 
 test-e2e: deps

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  HTTP Requests · Collections · OpenAPI · Mock Server · JSON Lab · Diagnostics · Performance · SSE · Automation
+  HTTP Requests · Collections · OpenAPI · Mock Server · JSON Lab · Diagnostics · Performance · CLI
 </p>
 
 Validex; HTTP isteği hazırlama, yanıt inceleme, koleksiyon yönetimi ve API
@@ -26,11 +26,9 @@ ayrıca bağımsız bir CLI sunar. Arayüz Türkçe ve İngilizce kullanılabili
 | Collections | Koleksiyon ve klasörlerle istekleri düzenleme, kaydetme, taşıma; Postman Collection v2.1 içe/dışa aktarma. |
 | OpenAPI | YAML/JSON belge yükleme, endpoint’ten istek oluşturma ve yanıtın sözleşmeden sapmalarını inceleme. |
 | Mock Server | Elle veya OpenAPI’den route oluşturma; durum kodu, header, body ve gecikme tanımlama. |
-| JSON Lab | JSON biçimlendirme, karşılaştırma, JSON Path sorgulama, şema çıkarma ve örnek veri üretme. |
+| JSON Lab | JSON biçimlendirme, karşılaştırma, JSON Path sorgulama, şema çıkarma ve örnek veri üretme; Firefox, GitHub ve Dracula renk paletleri. |
 | Diagnostics | Spring hataları, JWT, Actuator, thread dump, log arama ve ortam farklarını inceleme. |
-| Performance | Tekrarlı isteklerle gecikme, yüzdelikler, throughput ve hata oranını ölçme; koşuları karşılaştırma. |
-| SSE | Header ve timeout desteğiyle Server-Sent Events akışlarını canlı izleme ve durdurma. |
-| Automation | Kayıtlı koleksiyonları veya runner JSON tanımlarını çalıştırma, assertion sonuçlarını inceleme, network inspection ve OpenAPI lint. |
+| Performance | Eşzamanlı istekler, ısınma ve kademeli yük artışı; gecikme, yüzdelikler, throughput, hata hedefleri ve Apdex; grafikler, referans karşılaştırması, oturum geçmişi ve JSON/CSV raporları. |
 | CLI | Koleksiyon çalıştırma, ağ inceleme ve OpenAPI lint işlemlerini terminalde veya CI içinde kullanma. |
 
 ## Hızlı başlangıç
@@ -70,7 +68,7 @@ npm ci
 
 1. **Requests** alanında bir HTTP isteği oluşturup kendi API’nize gönderin.
 2. Yanıtın durum kodunu, body’sini, header’larını ve zamanlamasını inceleyin.
-3. İsteği bir koleksiyona kaydedin; tekrar kullanın veya Automation’da çalıştırın.
+3. İsteği bir koleksiyona kaydedip tekrar kullanın; otomatik testler için [CLI koleksiyon çalıştırma](#koleksiyon-çalıştırma) örneğini izleyin.
 4. [openapi.sample.yaml](openapi.sample.yaml) dosyasını yükleyerek OpenAPI ve mock server akışlarını deneyin.
 
 Hazır bir yerel API için ayrı terminalde aşağıdaki test sunucusunu açabilirsiniz:
@@ -126,15 +124,26 @@ koleksiyonun içeriğini kontrol edin.
 
 ## CLI kullanımı
 
-CLI, Node.js ve Electron gerektirmez. Go ve Make ile derleyin:
+CLI'yi çalıştırmak için Node.js veya Electron gerekmez. Sürüm ve platform
+metaverisini hazırlayan `make build-cli` komutu Go, Node.js ve GNU Make gerektirir:
 
 ```bash
 make build-cli
 ./cmd/validex/build/bin/validex-cli --help
 ```
 
-Make olmadan `go run ./cmd/validex-cli --help` ile de çalıştırabilirsiniz.
-Windows’ta derlenen dosyanın adı `validex-cli.exe` olur.
+Yalnız Go ile derlemek için:
+
+```bash
+go build -o validex-cli ./cmd/validex-cli
+./validex-cli --help
+```
+
+Bu alternatif varsayılan `development` sürüm metaverisini kullanır; paketleme
+betiğinin platforma özel marka ve imza adımlarını uygulamaz.
+`go run ./cmd/validex-cli --help` ile de çalıştırabilirsiniz.
+Windows'ta Make çıktısı `validex-cli.exe` olur; doğrudan `go build` komutunda
+`-o validex-cli.exe` kullanın.
 
 ### Koleksiyon çalıştırma
 
@@ -213,6 +222,28 @@ make install-linux LINUX_INSTALL_PREFIX=/your/install/prefix
 
 Varsayılan kök `~/.local` dizinidir; komut uygulamayı derler, kurar ve masaüstü
 menü girdisini oluşturur.
+
+## Kurumsal güvenlik kaydı
+
+Masaüstü kabuğu, Go arka ucu ve CLI aynı `com.validex.Validex` uygulama
+kimliğini ve sabit ürün UUID'sini kullanır. Bileşenler tek ürün kaydı altında
+`desktop`, `backend`, `cli` rolleri ve gerçek dosya yollarıyla ayırt edilir.
+
+**Yardım → Uygulama kimliği / Help → Application identity** menüsünden veya
+**Cmd/Ctrl+Shift+F12** ile kimlik raporunu açın. **Raporu kopyala / Copy report**
+dosya yollarını, SHA-256 değerlerini ve imza durumunu IT talebine aktarmayı
+sağlar; **Günlükleri aç / Open logs** başlangıç kayıtlarını gösterir.
+
+Derlenmiş arka uç ve CLI için terminalden de rapor alınabilir:
+
+```bash
+./cmd/validex/build/bin/validex-backend --identity
+./cmd/validex/build/bin/validex-cli --identity
+```
+
+Windows'ta dosya adlarına `.exe` ekleyin. Kimlik raporu erişim izni vermez;
+kurumsal onay için [günlük konumları, doğrulama komutları ve hazır IT talep
+şablonunu](docs/security-registration.md) kullanın.
 
 ## Testler
 

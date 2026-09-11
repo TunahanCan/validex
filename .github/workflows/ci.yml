@@ -110,6 +110,12 @@ jobs:
           test -s "$resources/frontend/appicon.png"
           test -s "$resources/frontend/appicon.svg"
           test -s "$resources/app/electron/dist/identity.js"
+          test -s "$resources/app/electron/dist/security-identity.js"
+          test -s "$resources/app/electron/dist/clipboard.js"
+          test -s "$resources/app/electron/dist/graphics.js"
+          test -s "$resources/application-identity.json"
+          test -s "$resources/application-build.json"
+          cmp internal/appidentity/manifest.json "$resources/application-identity.json"
           test -s "$resources/validex-backend"
           test -s "$resources/validex.icns"
           test ! -e "$resources/electron.icns"
@@ -121,6 +127,11 @@ jobs:
               "cmd/validex/build/bin/Validex.app/Contents/Info.plist"
           )" = "validex.icns"
           cmp "cmd/validex/build/Validex.icns" "$resources/validex.icns"
+          for executable in "$resources/validex-backend" "cmd/validex/build/bin/validex-backend" "cmd/validex/build/bin/validex-cli"; do
+            codesign --verify --strict "$executable"
+            codesign --display --verbose=2 "$executable" 2>&1 | grep '^Identifier=com.validex.Validex$'
+            "$executable" --identity
+          done
 
   package-linux:
     runs-on: ubuntu-24.04
@@ -154,10 +165,18 @@ jobs:
           test -s "$resources/frontend/appicon.png"
           test -s "$resources/frontend/appicon.svg"
           test -s "$resources/app/electron/dist/identity.js"
+          test -s "$resources/app/electron/dist/security-identity.js"
+          test -s "$resources/app/electron/dist/clipboard.js"
+          test -s "$resources/app/electron/dist/graphics.js"
+          test -s "$resources/application-identity.json"
+          test -s "$resources/application-build.json"
+          cmp internal/appidentity/manifest.json "$resources/application-identity.json"
           test -s "$resources/validex-backend"
           test -s "$resources/THIRD_PARTY_NOTICES.md"
           test -s "$resources/LICENSE.electron"
           test -s "$resources/LICENSES.chromium.html"
+          "$resources/validex-backend" --identity
+          cmd/validex/build/bin/validex-cli --identity
           ldd "cmd/validex/build/bin/Validex/validex" |
             tee "$RUNNER_TEMP/validex-ldd.txt"
           if grep -F "not found" "$RUNNER_TEMP/validex-ldd.txt"; then
@@ -189,14 +208,8 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $true
-          New-Item -ItemType Directory -Force `
-            "cmd/validex/build/bin" | Out-Null
-          go build -o `
-            "cmd/validex/build/bin/validex-backend.exe" `
-            ./cmd/validex-backend
-          go build -o `
-            "cmd/validex/build/bin/validex-cli.exe" `
-            ./cmd/validex-cli
+          node --test cmd/validex/scripts/windows-application-identity.test.mjs
+          node cmd/validex/scripts/build-go.mjs backend cli
           try {
             Push-Location cmd/validex
             npm run build
@@ -217,6 +230,11 @@ jobs:
             "$resources/frontend/appicon.png",
             "$resources/frontend/appicon.svg",
             "$resources/app/electron/dist/identity.js",
+            "$resources/app/electron/dist/security-identity.js",
+            "$resources/app/electron/dist/clipboard.js",
+            "$resources/app/electron/dist/graphics.js",
+            "$resources/application-identity.json",
+            "$resources/application-build.json",
             "$resources/validex-backend.exe",
             "$resources/THIRD_PARTY_NOTICES.md",
             "$resources/LICENSE.electron",
@@ -230,3 +248,12 @@ jobs:
               throw "Empty packaged file: $path"
             }
           }
+          foreach ($path in @("cmd/validex/build/bin/Validex/validex.exe", "$resources/validex-backend.exe", "cmd/validex/build/bin/validex-cli.exe")) {
+            $version = (Get-Item -LiteralPath $path).VersionInfo
+            if ($version.ProductName -ne "Validex" -or $version.InternalName -ne "com.validex.Validex" -or
+                $version.OriginalFilename -ne (Split-Path -Leaf $path)) {
+              throw "Incorrect Validex executable identity: $path"
+            }
+          }
+          & "$resources/validex-backend.exe" --identity
+          & "cmd/validex/build/bin/validex-cli.exe" --identity

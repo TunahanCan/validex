@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "productUUID": "6a2bf295-cc04-4390-abaf-9ccfcdbc3379",
+  "applicationID": "com.validex.Validex",
+  "applicationName": "Validex",
+  "backendProcessName": "validex-backend",
+  "cliProcessName": "validex-cli"
+}
