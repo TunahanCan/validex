@@ -10,9 +10,11 @@ cmd/validex/frontend/dist/*
 !cmd/validex/frontend/dist/.gitkeep
 
 # Platform build outputs
-cmd/validex/build/bin/
-cmd/validex/build/dev/
-cmd/validex/build/Validex.icns
-cmd/validex/build/.validex-mac-icon.json
-cmd/validex/build/Validex.iconset/
+/build/bin/
+/build/dev/
+/build/Validex.icns
+/build/.validex-mac-icon.json
+/build/Validex.iconset/
+/build/.electron-*/
+/build/.validex-icon-*/
 cmd/validex/app_*.syso

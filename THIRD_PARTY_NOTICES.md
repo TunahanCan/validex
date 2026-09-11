@@ -1,23 +1,56 @@
-# Third-party notices
+# Third-party software notices
 
-Validex uses the following third-party software. This notice is distributed
-with the desktop runtime.
+This document accompanies the Validex desktop distribution. It identifies the
+Electron runtime and TypeScript compiler used by this source tree, explains
+where their notices are supplied, and reproduces the license texts below.
 
-## TypeScript
+## Components and distribution
 
-- Project: Microsoft TypeScript
-- Version: 5.9.3
-- Source: <https://github.com/microsoft/TypeScript/tree/v5.9.3>
-- Package artifact:
-  <https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz>
-- Installation: npm installs the package according to
-  `cmd/validex/package-lock.json`; TypeScript is not vendored in the repository
-- Use: build-only TypeScript compiler; it is not included in the generated
-  frontend or packaged desktop runtime
-- License: Apache License 2.0
+| Component | Pinned version | Role in Validex | License information |
+| --- | --- | --- | --- |
+| TypeScript | 5.9.3 | Compiles the frontend and Electron application code during development and packaging | Apache License 2.0; text below |
+| Electron | 43.2.0 | Shipped desktop shell and Chromium runtime | MIT; text below and packaged `LICENSE.electron` |
+| Chromium and Electron's bundled components | Included with the Electron runtime | Shipped browser engine and supporting runtime components | Component-specific notices in `LICENSES.chromium.html` |
 
-The installed npm package contains the upstream `LICENSE.txt` and
-`ThirdPartyNoticeText.txt` files.
+The direct npm package versions are declared in `cmd/validex/package.json`;
+`cmd/validex/package-lock.json` records the resolved packages and integrity
+values. `npm ci` installs those versions under `cmd/validex/node_modules/`.
+Both direct packages are development dependencies in npm metadata, but the
+Electron runtime is copied into the desktop application during packaging.
+
+The TypeScript compiler is used only by the build tools. Its package is not
+copied into `frontend/dist` or the packaged desktop runtime. The frontend
+output consists of browser-native JavaScript and static assets.
+
+## Notice files in an application package
+
+`make build` assembles desktop outputs under repository-root `build/bin/`.
+The platform targets use the same application packaging step. The following
+three files accompany each assembled desktop application:
+
+| File | Contents |
+| --- | --- |
+| `THIRD_PARTY_NOTICES.md` | This document |
+| `LICENSE.electron` | Electron's upstream runtime license |
+| `LICENSES.chromium.html` | Upstream notices for Chromium and other bundled runtime components |
+
+On Linux and Windows these files are in `Validex/resources/`. On macOS they
+are in `Validex.app/Contents/Resources/`. The Linux `.deb` installs them under
+`/usr/lib/validex/resources/` and provides links in `/usr/share/doc/validex/`.
+
+`cmd/validex/scripts/package-electron.mjs` copies the upstream runtime notice
+files from `cmd/validex/node_modules/electron/dist/` without rewriting their
+license contents. `cmd/validex/scripts/package-deb.mjs` creates the Linux
+documentation links.
+
+## TypeScript: package and license
+
+The compiler package is Microsoft TypeScript 5.9.3:
+
+- [Versioned source](https://github.com/microsoft/TypeScript/tree/v5.9.3)
+- [npm package archive](https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz)
+- Installed license: `cmd/validex/node_modules/typescript/LICENSE.txt`
+- Additional upstream notices: `cmd/validex/node_modules/typescript/ThirdPartyNoticeText.txt`
 
 ```text
 Apache License
@@ -185,19 +218,14 @@ accepting any such warranty or additional liability.
 END OF TERMS AND CONDITIONS
 ```
 
-## Electron
+## Electron: package and license
 
-- Project: Electron
-- Version: 43.2.0
-- Source: <https://github.com/electron/electron/tree/v43.2.0>
-- Package artifact:
-  <https://registry.npmjs.org/electron/-/electron-43.2.0.tgz>
-- Installation: npm installs the package according to
-  `cmd/validex/package-lock.json`
-- Use: desktop shell and packaged Chromium runtime
-- License: MIT
+The desktop runtime package is Electron 43.2.0:
 
-The packaged desktop runtime includes this license as `LICENSE.electron`.
+- [Versioned source](https://github.com/electron/electron/tree/v43.2.0)
+- [npm package archive](https://registry.npmjs.org/electron/-/electron-43.2.0.tgz)
+- Upstream runtime license: `cmd/validex/node_modules/electron/dist/LICENSE`
+- Distributed license filename: `LICENSE.electron`
 
 ```text
 Copyright (c) Electron contributors
@@ -223,13 +251,33 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-## Chromium and bundled runtime components
+## Chromium and bundled runtime notices
 
-Electron 43.2.0 packages Chromium and other third-party runtime components.
-Those components use multiple open-source licenses. The authoritative
-copyright and license texts supplied by Electron are distributed with every
-Validex desktop runtime as `LICENSES.chromium.html`.
+The authoritative component copyright and license texts for the downloaded
+Electron runtime are supplied in
+`cmd/validex/node_modules/electron/dist/LICENSES.chromium.html`. Validex
+redistributes this file as `LICENSES.chromium.html`; consult it for the
+individual components and their terms.
 
-- Chromium source: <https://chromium.googlesource.com/chromium/src/>
-- Electron third-party notices:
-  `cmd/validex/node_modules/electron/dist/LICENSES.chromium.html`
+The Chromium source repository is
+[chromium/src](https://chromium.googlesource.com/chromium/src/). The running
+Electron and Chromium versions appear in Validex's application identity
+report.
+
+## Go dependency inventory
+
+The backend and standalone CLI are Go executables. Their module versions are
+recorded in `go.mod` and `go.sum`; test-only browser dependencies are recorded
+separately in `tests/e2e/go.mod` and `tests/e2e/go.sum`. This document does not
+constitute a complete Go dependency or license inventory.
+
+To inspect the Go version and linked module metadata of a particular build,
+run these commands from the repository root:
+
+```bash
+go version -m build/bin/validex-backend
+go version -m build/bin/validex-cli
+```
+
+On Windows append `.exe` to the executable names. Build metadata describes
+the inspected file and does not replace the dependencies' upstream licenses.

@@ -33,7 +33,7 @@ import { stampWindowsExecutable } from "./windows-application-identity.mjs";
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const applicationRoot = resolve(scriptDirectory, "..");
 const repositoryRoot = resolve(applicationRoot, "..", "..");
-const buildRoot = join(applicationRoot, "build");
+const buildRoot = join(repositoryRoot, "build");
 const outputRoot = join(buildRoot, "bin");
 const developmentOutputRoot = join(buildRoot, "dev");
 
@@ -387,7 +387,7 @@ async function packageDevelopmentRuntime() {
       "The branded Electron development runtime is available only on macOS",
     );
   }
-  if (!containedPath(applicationRoot, buildRoot)) {
+  if (!containedPath(repositoryRoot, buildRoot)) {
     throw new Error("unsafe Validex development runtime path");
   }
   await requireRegularFile(
@@ -461,7 +461,7 @@ async function packageDevelopmentRuntime() {
 }
 
 async function packageApplication() {
-  if (!containedPath(applicationRoot, buildRoot)) {
+  if (!containedPath(repositoryRoot, buildRoot)) {
     throw new Error("unsafe Validex build output path");
   }
   await mkdir(outputRoot, { recursive: true });

@@ -5,13 +5,42 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 
 import {
+  cleanEnvironment,
   defaultApplicationRoot,
   electronLaunchPlan,
-  linuxGraphicsArguments,
   runChildProcess,
 } from "./start-electron.mjs";
 
 const applicationRoot = resolve("/workspace", "cmd", "validex");
+
+test("Linux launch restores desktop schema paths from a VS Code Snap terminal", () => {
+  const environment = {
+    ELECTRON_RUN_AS_NODE: "1",
+    GSETTINGS_SCHEMA_DIR: "/home/user/snap/code/schemas",
+    XDG_DATA_DIRS: "/snap/code/usr/share",
+    XDG_DATA_DIRS_VSCODE_SNAP_ORIG: "/usr/local/share:/usr/share",
+    XDG_DATA_HOME: "/home/user/snap/code/data",
+    WAYLAND_DISPLAY: "wayland-0",
+  };
+  const cleaned = cleanEnvironment(environment, "linux");
+  assert.equal(cleaned.XDG_DATA_DIRS, "/usr/local/share:/usr/share");
+  assert.equal(cleaned.WAYLAND_DISPLAY, "wayland-0");
+  assert.equal(cleaned.GSETTINGS_SCHEMA_DIR, undefined);
+  assert.equal(cleaned.XDG_DATA_HOME, undefined);
+  assert.equal(cleaned.ELECTRON_RUN_AS_NODE, undefined);
+  assert.equal(environment.GSETTINGS_SCHEMA_DIR, "/home/user/snap/code/schemas");
+});
+
+test("custom GTK paths are preserved outside a Linux VS Code Snap terminal", () => {
+  const environment = {
+    GSETTINGS_SCHEMA_DIR: "/custom/schemas",
+    XDG_DATA_HOME: "/custom/data",
+    XDG_DATA_DIRS: "/custom/share",
+  };
+  assert.deepEqual(cleanEnvironment(environment, "linux"), environment);
+  const snapEnvironment = { ...environment, XDG_DATA_DIRS_VSCODE_SNAP_ORIG: "/original" };
+  assert.deepEqual(cleanEnvironment(snapEnvironment, "darwin"), snapEnvironment);
+});
 
 test("macOS development launches the branded Validex application bundle", () => {
   const plan = electronLaunchPlan({
@@ -22,8 +51,10 @@ test("macOS development launches the branded Validex application bundle", () => 
 
   assert.equal(
     plan.command,
-    join(
+    resolve(
       applicationRoot,
+      "..",
+      "..",
       "build",
       "dev",
       "Validex.app",
@@ -63,62 +94,45 @@ test("non-macOS development keeps the platform Electron launcher", () => {
   assert.equal(plan.preparation, undefined);
 });
 
-test("Linux Wayland development uses available XWayland graphics", () => {
+test("Linux development lets Electron select the native display backend", () => {
   for (const environment of [
     { DISPLAY: ":0", XDG_SESSION_TYPE: "wayland" },
-    { DISPLAY: ":0", WAYLAND_DISPLAY: "wayland-0" },
+    { WAYLAND_DISPLAY: "wayland-0", XDG_SESSION_TYPE: "wayland" },
+    { DISPLAY: ":0", XDG_SESSION_TYPE: "x11" },
   ]) {
-    assert.deepEqual(
-      linuxGraphicsArguments({
-        arguments: ["--backend=/tmp/validex-backend"],
-        environment,
-        platform: "linux",
-      }),
-      ["--ozone-platform=x11"],
-    );
+    const plan = electronLaunchPlan({
+      applicationRoot,
+      arguments: ["--backend=/tmp/validex-backend"],
+      environment,
+      platform: "linux",
+    });
+    assert.deepEqual(plan.arguments, [
+      applicationRoot,
+      "--backend=/tmp/validex-backend",
+    ]);
   }
-
-  const plan = electronLaunchPlan({
-    applicationRoot,
-    arguments: ["--backend=/tmp/validex-backend"],
-    environment: {
-      DISPLAY: ":0",
-      WAYLAND_DISPLAY: "wayland-0",
-      XDG_SESSION_TYPE: "wayland",
-    },
-    platform: "linux",
-  });
-  assert.deepEqual(plan.arguments, [
-    applicationRoot,
-    "--ozone-platform=x11",
-    "--backend=/tmp/validex-backend",
-  ]);
 });
 
-test("Linux launcher preserves explicit and pure Wayland runtimes", () => {
+test("Linux launcher preserves explicit Ozone and graphics arguments", () => {
   for (const arguments_ of [
+    ["--ozone-platform=x11"],
+    ["--ozone-platform", "x11"],
     ["--ozone-platform=wayland"],
     ["--ozone-platform", "wayland"],
+    ["--ozone-platform=headless"],
+    ["--disable-features=ExistingFeature"],
   ]) {
+    const plan = electronLaunchPlan({
+      applicationRoot,
+      arguments: arguments_,
+      environment: { DISPLAY: ":0", XDG_SESSION_TYPE: "wayland" },
+      platform: "linux",
+    });
     assert.deepEqual(
-      linuxGraphicsArguments({
-        arguments: arguments_,
-        environment: { DISPLAY: ":0", XDG_SESSION_TYPE: "wayland" },
-        platform: "linux",
-      }),
-      [],
+      plan.arguments,
+      [applicationRoot, ...arguments_],
     );
   }
-  assert.deepEqual(
-    linuxGraphicsArguments({
-      environment: {
-        WAYLAND_DISPLAY: "wayland-0",
-        XDG_SESSION_TYPE: "wayland",
-      },
-      platform: "linux",
-    }),
-    [],
-  );
 });
 
 test("desktop start scripts never launch the stock Electron bundle directly", async () => {

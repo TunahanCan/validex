@@ -99,13 +99,13 @@ jobs:
         run: npm ci
 
       - name: Build Electron application
-        run: make build
+        run: make macos_app
 
       - name: Verify packaged application
         run: |
-          resources="cmd/validex/build/bin/Validex.app/Contents/Resources"
-          test -x "cmd/validex/build/bin/Validex.app/Contents/MacOS/Validex"
-          test -x "cmd/validex/build/bin/validex-cli"
+          resources="build/bin/Validex.app/Contents/Resources"
+          test -x "build/bin/Validex.app/Contents/MacOS/Validex"
+          test -x "build/bin/validex-cli"
           test -s "$resources/frontend/index.html"
           test -s "$resources/frontend/appicon.png"
           test -s "$resources/frontend/appicon.svg"
@@ -124,10 +124,10 @@ jobs:
           test -s "$resources/LICENSES.chromium.html"
           test "$(
             plutil -extract CFBundleIconFile raw \
-              "cmd/validex/build/bin/Validex.app/Contents/Info.plist"
+              "build/bin/Validex.app/Contents/Info.plist"
           )" = "validex.icns"
-          cmp "cmd/validex/build/Validex.icns" "$resources/validex.icns"
-          for executable in "$resources/validex-backend" "cmd/validex/build/bin/validex-backend" "cmd/validex/build/bin/validex-cli"; do
+          cmp "build/Validex.icns" "$resources/validex.icns"
+          for executable in "$resources/validex-backend" "build/bin/validex-backend" "build/bin/validex-cli"; do
             codesign --verify --strict "$executable"
             codesign --display --verbose=2 "$executable" 2>&1 | grep '^Identifier=com.validex.Validex$'
             "$executable" --identity
@@ -153,14 +153,21 @@ jobs:
         working-directory: cmd/validex
         run: npm ci
 
-      - name: Build Electron application
-        run: make build
+      - name: Ensure Debian packaging tools
+        run: |
+          if ! command -v dpkg-deb >/dev/null || ! command -v dpkg-shlibdeps >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y dpkg-dev
+          fi
+
+      - name: Build Linux application and Debian package
+        run: make linux_app
 
       - name: Verify packaged application
         run: |
-          resources="cmd/validex/build/bin/Validex/resources"
-          test -x "cmd/validex/build/bin/Validex/validex"
-          test -x "cmd/validex/build/bin/validex-cli"
+          resources="build/bin/Validex/resources"
+          test -x "build/bin/Validex/validex"
+          test -x "build/bin/validex-cli"
           test -s "$resources/frontend/index.html"
           test -s "$resources/frontend/appicon.png"
           test -s "$resources/frontend/appicon.svg"
@@ -176,12 +183,44 @@ jobs:
           test -s "$resources/LICENSE.electron"
           test -s "$resources/LICENSES.chromium.html"
           "$resources/validex-backend" --identity
-          cmd/validex/build/bin/validex-cli --identity
-          ldd "cmd/validex/build/bin/Validex/validex" |
+          build/bin/validex-cli --identity
+          ldd "build/bin/Validex/validex" |
             tee "$RUNNER_TEMP/validex-ldd.txt"
           if grep -F "not found" "$RUNNER_TEMP/validex-ldd.txt"; then
             exit 1
           fi
+
+      - name: Verify Debian package
+        run: |
+          packages=(build/bin/validex_*.deb)
+          test "${#packages[@]}" -eq 1
+          package="${packages[0]}"
+          test -s "$package"
+          (cd build/bin && sha256sum --check "$(basename "$package").sha256")
+          test "$(dpkg-deb --field "$package" Package)" = "validex"
+          test "$(dpkg-deb --field "$package" Architecture)" = "$(dpkg --print-architecture)"
+          version="$(node -p 'require("./cmd/validex/package.json").version.replace(/^(\d+\.\d+\.\d+)-/, "$1~")')"
+          test "$(dpkg-deb --field "$package" Version)" = "$version"
+          test -n "$(dpkg-deb --field "$package" Depends)"
+          package_root="$(mktemp -d "$RUNNER_TEMP/validex-deb.XXXXXX")"
+          trap 'rm -rf "$package_root"' EXIT
+          dpkg-deb --extract "$package" "$package_root"
+          dpkg-deb --control "$package" "$package_root/DEBIAN"
+          (cd "$package_root" && md5sum --check --quiet DEBIAN/md5sums)
+          desktop="$package_root/usr/share/applications/com.validex.Validex.desktop"
+          grep -Fx 'Exec="/usr/bin/validex"' "$desktop"
+          grep -Fx 'TryExec=/usr/bin/validex' "$desktop"
+          grep -Fx 'Icon=com.validex.Validex' "$desktop"
+          test -s "$package_root/usr/share/icons/hicolor/scalable/apps/com.validex.Validex.svg"
+          test -x "$package_root/usr/bin/validex"
+          test "$(readlink "$package_root/usr/bin/validex-cli")" = "../lib/validex/resources/validex-cli"
+          "$package_root/usr/bin/validex-cli" --identity
+          "$package_root/usr/lib/validex/resources/validex-backend" --identity
+          sandbox_metadata="$(dpkg-deb --fsys-tarfile "$package" |
+            tar --numeric-owner -tvf - ./usr/lib/validex/chrome-sandbox)"
+          read -r permissions owner _ <<< "$sandbox_metadata"
+          test "$permissions" = "-rwsr-xr-x"
+          test "$owner" = "0/0"
 
   package-windows:
     runs-on: windows-2022
@@ -222,10 +261,10 @@ jobs:
       - name: Verify packaged application
         shell: pwsh
         run: |
-          $resources = "cmd/validex/build/bin/Validex/resources"
+          $resources = "build/bin/Validex/resources"
           $expected = @(
-            "cmd/validex/build/bin/Validex/validex.exe",
-            "cmd/validex/build/bin/validex-cli.exe",
+            "build/bin/Validex/validex.exe",
+            "build/bin/validex-cli.exe",
             "$resources/frontend/index.html",
             "$resources/frontend/appicon.png",
             "$resources/frontend/appicon.svg",
@@ -248,7 +287,7 @@ jobs:
               throw "Empty packaged file: $path"
             }
           }
-          foreach ($path in @("cmd/validex/build/bin/Validex/validex.exe", "$resources/validex-backend.exe", "cmd/validex/build/bin/validex-cli.exe")) {
+          foreach ($path in @("build/bin/Validex/validex.exe", "$resources/validex-backend.exe", "build/bin/validex-cli.exe")) {
             $version = (Get-Item -LiteralPath $path).VersionInfo
             if ($version.ProductName -ne "Validex" -or $version.InternalName -ne "com.validex.Validex" -or
                 $version.OriginalFilename -ne (Split-Path -Leaf $path)) {
@@ -256,4 +295,4 @@ jobs:
             }
           }
           & "$resources/validex-backend.exe" --identity
-          & "cmd/validex/build/bin/validex-cli.exe" --identity
+          & "build/bin/validex-cli.exe" --identity

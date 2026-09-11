@@ -1,144 +1,159 @@
-# Validex için kurumsal uygulama kaydı
+# Validex uygulama kimliği ve IT kaydı
 
-Bu belge, Validex'in kurumsal uç nokta ve ağ güvenliği ekiplerine kaydedilmesi için kimlik bilgilerini ve doldurulabilir talep metnini içerir. Uygulama kimliği raporu ile engelleme olayını aynı cihaz, çalıştırılabilir dosya ve zaman üzerinden eşleştirin.
+Validex'i kurum envanterine eklemek veya engellenen bir çalıştırmayı incelemek
+için uygulamanın kimlik raporunu kullanın. Rapor, aynı ürüne ait masaüstü,
+Go arka ucu ve CLI dosyalarını gerçek yolları ve dosya özetleriyle gösterir.
 
-`Validex`, uygulama kimliği ve ürün UUID'si sürümler arasında envanter eşleştirmesini sağlar. Bunlar yayıncı sertifikası değildir. `Publisher: N/A` görülmesi tek başına engellemenin nedenini kanıtlamaz; güvenlik ekibi olay kaydındaki süreç, imza ve politika sonucunu incelemelidir. macOS'ta ad-hoc imza bir yayıncı kimliği içermez. [Apple: ad-hoc imza](https://developer.apple.com/documentation/security/seccodesignatureflags/adhoc?changes=_8).
+## Raporu alma
 
-## Tek uygulama kimliği
+1. İncelenecek Validex paketini başlatın.
+2. **Yardım → Uygulama kimliği / Help → Application identity** menüsünü açın.
+   Kısayol macOS'ta **Cmd+Shift+F12**, Linux/Windows'ta **Ctrl+Shift+F12**'dir.
+3. **Raporu kopyala / Copy report** ile metni alın. **Günlükleri aç / Open logs**
+   aynı kaydın JSON ve metin dosyalarını içeren klasörü açar.
 
-| Alan | Değer / kaynak |
+Rapor uygulama başlarken toplanır. Farklı bir sürüm veya dosya doğrulanacaksa
+ilgili paketi yeniden başlatın. Raporun zamanı, masaüstü/arka uç PID'leri ve
+engelleme kaydındaki dosya yolu aynı çalıştırmayla eşleştirilmelidir.
+
+## Ürün ve bileşen bilgileri
+
+| Alan | Değer |
 | --- | --- |
 | Ürün adı | `Validex` |
-| Masaüstü, Go arka ucu ve CLI uygulama kimliği | `com.validex.Validex` |
-| Ana çalıştırılabilir dosyaların bileşen/imzalama tanımlayıcısı | `com.validex.Validex` |
-| Bileşen rolleri | `desktop`, `backend`, `cli` |
+| Ortak uygulama kimliği | `com.validex.Validex` |
 | Ürün UUID'si | `6a2bf295-cc04-4390-abaf-9ccfcdbc3379` |
-| Sürüm, platform, mimari | İncelenen çalıştırmanın kimlik raporu |
-| Dosya SHA-256 | İmzalama ve paketleme tamamlandıktan sonraki gerçek dosya özeti |
+| Çalıştırılabilir bileşenler | `desktop`, `backend`, `cli` |
 
-Ürün UUID'si kurulum veya kullanıcı kimliği değildir. Dosyanın içeriği değiştiğinde SHA-256 da değişir; yeni sürüm için rapor yeniden alınır. Geliştirme çalıştırmasının geçici yolları veya imzaları üretim paketiyle aynı kabul edilmez.
+Bu değerlerin kaynağı [ürün bildirimi](../internal/appidentity/manifest.json)
+dosyasıdır. Her paket kendi sürümünü, revision bilgisini, platformunu ve
+mimarisini taşır; bunları incelenen dosyanın raporundan alın.
 
-Masaüstü kabuğu, Go arka ucu ve CLI aynı uygulama kimliğini ve ürün UUID'sini kullanır. Bileşenler rol ve gerçek dosya adı/yoluyla ayırt edilir; arka uç veya CLI için ayrı ürün kaydı açılmaz. Electron yardımcı süreçlerinin ve geliştirme paketinin platforma özgü çalışma zamanı tanımlayıcıları raporda ayrıca görülebilir; bunlar Validex'in ortak ürün kimliğini değiştirmez.
-
-Sabit kimliklerin kaynağı [ürün bildirimi](../internal/appidentity/manifest.json) dosyasıdır; pakette `resources/application-identity.json` altında bulunur. macOS paketinde kaynak dizini `Contents/Resources`'tır.
-
-## Güvenlik ekibinin eşleştirebileceği alanlar
-
-| Platform | Politika incelemesi için kanıt | Sınır |
-| --- | --- | --- |
-| macOS | Doğrulanan imza zinciri, Team ID, imzadaki `Identifier` ve designated requirement; gerektiğinde ürünün istediği dosya özeti | Bundle ID tek başına yayıncıyı doğrulamaz. Kabuğun ve arka ucun imzaları ayrı incelenir. [Apple: kod imzası gereksinimleri](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements). |
-| Windows | Authenticode imza durumu, sertifika yayıncısı; ürün destekliyorsa yayıncı + dosya adı + sürüm kapsamı veya dosya özeti | `CompanyName`, `ProductName` ve dosya adı dosya metaverisidir. AppUserModelID pencere/süreç gruplamasında kullanılır; yayıncı sertifikası yerine geçmez. [Microsoft: kural türleri](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/select-types-of-rules-to-create), [AppUserModelID](https://learn.microsoft.com/en-us/windows/win32/properties/props-system-appusermodel-id). |
-| Linux | Gerçek çalıştırılabilir dosya yolu, SHA-256, kurulum sahibi/izinleri ve varsa dağıtım paketinin kaydı | Tüm Linux güvenlik ürünleri için ortak bir yayıncı kimliği yoktur. Örneğin RHEL `fapolicyd`, RPM veritabanı ve ayrıca tanımlanan dosya güven kayıtlarını kullanır. Dosya değişiklikleri güven kaydının güncellenmesini gerektirebilir. [Red Hat: fapolicyd](https://docs.redhat.com/en/documentation/red_hat_enterprise_linux/10/html/security_hardening/blocking-and-allowing-applications-by-using-fapolicyd). |
-
-Windows App Control, hash kurallarında çoğunlukla Authenticode/PE image hash kullanır. Bu değer, kimlik raporundaki ham dosya SHA-256'sından farklı olabilir. Ham SHA-256'yı kanıt olarak iletin; politika için gereken özeti güvenlik ekibi kendi aracında aynı dosyadan üretsin. [Microsoft: hash davranışı](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/design/select-types-of-rules-to-create#more-information-about-hashes).
-
-macOS dağıtımında Developer ID imzası ve notarization ayrı işlemlerdir. Bunların tamamlanmış olması kurumsal intranet erişimi izni vermez; kurumun ilgili güvenlik politikası ayrıca değerlendirilir. Yayın imzalama süreci uygulamadaki arka uç ve yardımcı çalıştırılabilir dosyaları da kapsamalıdır. [Apple: imza ve notarization](https://support.apple.com/guide/security/app-code-signing-process-sec3ad8e6e53/web), [dağıtım imzalama sırası](https://developer.apple.com/documentation/xcode/creating-distribution-signed-code-for-the-mac?changes=_1).
-
-## İncelenecek dosyalar ve günlükler
-
-Kimlik raporundaki gerçek yolları esas alın. Standart paket yerleşimleri şöyledir; kurulum kökü cihaza göre değişir:
-
-| Platform | Masaüstü süreci | Ağ isteklerini yapan Go arka ucu |
-| --- | --- | --- |
-| macOS | `Validex.app/Contents/MacOS/Validex` | `Validex.app/Contents/Resources/validex-backend` |
-| Windows | `Validex\validex.exe` | `Validex\resources\validex-backend.exe` |
-| Linux | `Validex/validex` | `Validex/resources/validex-backend` |
-
-CLI ayrıca kullanılıyorsa `validex-cli` / `validex-cli.exe` aynı ürün kaydının dosya listesine eklenir. Engelleme olayındaki süreç adı, bu listedeki rol ve gerçek dosya yoluyla eşleştirilir.
-
-Uygulamada **Yardım → Uygulama kimliği** / **Help → Application identity** menüsünü veya **⌘/Ctrl+Shift+F12** kısayolunu açın. **Raporu kopyala / Copy report** ile raporu alın; **Günlükleri aç / Open logs** ile kayıt klasörünü görüntüleyin. Windows/Linux'ta menü çubuğu gizliyse `Alt` ile açılır.
-
-| Platform | Kimlik günlüğü klasörü |
+| Rapordaki kayıt | Görevi ve kanıtı |
 | --- | --- |
-| macOS | `~/Library/Application Support/Validex/logs/` |
+| `desktop` | Electron ana süreci; executable yolu, SHA-256, PID ve imza sonucu |
+| `backend` | Masaüstünün HTTP(S) isteklerini yapan `validex-backend` alt süreci; dosya bilgisi ve başlatılabildiyse PID |
+| `cli` | Ayrı kullanılan `validex-cli` dosyası; raporun aradığı konumda varsa eklenir |
+| `application-code` | Electron JavaScript giriş dosyasının yolu ve SHA-256 değeri; ayrı bir süreç değildir |
+
+Rapor ayrıca masaüstünün üst süreç PID'sini, oturum kimliğini, kayıt zamanını,
+Electron/Chromium sürümlerini ve çözümlenmiş dosya yollarını içerir. Okunamayan
+alanlar `diagnosticErrors` veya ilgili dosyanın `error` alanında belirtilir.
+
+## Dosyaların konumu
+
+Kaynak koddan paketleme çıktıları repository kökündeki `build/bin/` altındadır:
+
+| Platform | Masaüstü | Go arka ucu |
+| --- | --- | --- |
+| Linux | `build/bin/Validex/validex` | `build/bin/Validex/resources/validex-backend` |
+| Windows | `build\bin\Validex\validex.exe` | `build\bin\Validex\resources\validex-backend.exe` |
+| macOS | `build/bin/Validex.app/Contents/MacOS/Validex` | `build/bin/Validex.app/Contents/Resources/validex-backend` |
+
+CLI çıktısı `build/bin/validex-cli` veya Windows'ta `validex-cli.exe`'dir.
+macOS geliştirme uygulaması `build/dev/Validex.app` altında hazırlanır.
+
+Linux `.deb` kurulumu uygulamayı `/usr/lib/validex/` altına yerleştirir.
+Masaüstü dosyası `/usr/lib/validex/validex`, Go bileşenleri bu dizinin
+`resources/validex-backend` ve `resources/validex-cli` dosyalarıdır.
+`/usr/bin/validex` başlatıcı betiği, `/usr/bin/validex-cli` CLI bağlantısıdır.
+`make install-linux` ise varsayılan `~/.local/lib/validex/` kökünü kullanır.
+Envantere raporun gösterdiği çözümlenmiş executable yolunu kaydedin.
+
+## Günlükler
+
+Kimlik dosyaları Electron `appData` dizininin `Validex/logs/` altına yazılır:
+
+| Platform | Varsayılan klasör |
+| --- | --- |
+| Linux | `$XDG_CONFIG_HOME/Validex/logs/`; değişken yoksa `~/.config/Validex/logs/` |
 | Windows | `%APPDATA%\Validex\logs\` |
-| Linux | `$XDG_CONFIG_HOME/Validex/logs/`; değişken tanımlı değilse `~/.config/Validex/logs/` |
+| macOS | `~/Library/Application Support/Validex/logs/` |
 
-`application-identity.json` güncel ayrıntılı rapordur; `application-identity.txt` talebe eklenebilecek metindir. `identity-startup.jsonl`, başlangıç kayıtlarını tutar; döndürülen önceki dosya `identity-startup.previous.jsonl` adını taşır. Rapor, masaüstü/arka uç/varsa CLI'nin gerçek yollarını ve SHA-256 değerlerini içerir. Paketteki sabit bildirim ile kullanıcı klasöründeki çalışma raporu farklı dosyalardır.
+`application-identity.json` yapılandırılmış rapor, `application-identity.txt`
+IT talebine eklenebilen metindir. Başlangıç kayıtları `identity-startup.jsonl`
+dosyasına eklenir; dosya 256 KiB'ye ulaştığında sonraki kayıttan önce
+`identity-startup.previous.jsonl` adına döndürülür. Kimlik günlüğü istek URL'si,
+header, body, token veya ortam değişkeni dökümü içermez.
 
-Go arka ucu ve CLI, `--identity` ile kimlik raporunu, `--version` ile sürümü yazdırır. Bu bilgi komutları API isteği göndermez. Başlangıç günlüğü trafik günlüğü değildir; engelleme zamanını kurumsal güvenlik ürünü kaydıyla eşleştirin.
+## İmza ve dosya özeti
 
-## Doldurulabilir IT talebi
+Uygulama kimliği ve UUID ürün eşleştirmesi içindir; yayıncı sertifikası veya
+kurumsal erişim onayı yerine geçmez. SHA-256 incelenen dosyayı tanımlar;
+paketleme veya imzalama dosyayı değiştirdiğinde özet de değişir.
 
-```text
-Konu: Validex — belirtilen API hedefleri için uygulama/ağ erişimi incelemesi
+- **macOS:** Rapor `codesign` doğrulamasını, Identifier, varsa Team ID ve
+  yayıncı zincirini gösterir. Derleme varsayılanı ad-hoc imzadır;
+  `VALIDEX_CODESIGN_IDENTITY` farklı bir imza kimliği seçebilir.
+- **Windows:** Rapor Authenticode sonucunu, varsa yayıncı ve sertifika
+  parmak izini gösterir. Paketleyici ayrıca Validex ürün/sürüm metaverisini
+  executable'lara yazar. Ham SHA-256, güvenlik aracının PE/Authenticode kuralı
+  için hesapladığı özetle aynı olmak zorunda değildir.
+- **Linux:** Raporda taşınabilir gömülü imza denetimi uygulanmaz. `.deb`
+  paket kaydı ile gerçek dosya yolu ve SHA-256 birlikte incelenebilir.
 
-Talep sahibi / ekip:
-İş amacı:
-Cihaz adı / işletim sistemi / mimari:
-Uygulama sürümü ve dağıtım kaynağı:
-Uygulama kimliği: com.validex.Validex
-Ürün UUID'si: [kimlik raporundan]
-Kayıt kapsamı: Tek Validex ürünü; masaüstü, arka uç ve kullanılan CLI
-Engellenen bileşenin rolü: [desktop / backend / cli]
-Gerçek dosya adı: [Validex / validex-backend / validex-cli; platform ekiyle]
-Gerçek dosya yolu:
-Ham dosya SHA-256:
-İmza durumu / yayıncı / Team ID veya sertifika bilgisi:
-Olay tarihi, saati ve saat dilimi:
-Güvenlik ürünü, olay/kural kimliği ve görünen mesaj:
+## Terminalden doğrulama
 
-Gerekli hedefler: [FQDN/IP], [TCP portu], [protokol]
-Gerekli erişim yönü: [örn. arka uçtan belirtilen API'ye giden HTTPS]
-Kullanıcı/cihaz grubu:
-Süre ve tekrar inceleme tarihi:
-Teknik sorumlu / hizmet sahibi:
+Go bileşenleri `--identity` ve `--version` seçeneklerini tek başına kabul eder.
+Bu komutlar API isteği göndermez. `--identity` çıktısındaki PID, komutu o anda
+çalıştıran sürece aittir; açık masaüstünün arka uç PID'si için masaüstü raporunu
+kullanın. Go raporu sürüm, yol, SHA-256, PID/PPID ve Go sürümünü içerir.
 
-Talep: com.validex.Validex kimliğiyle tek ürün kaydı oluşturulması;
-ekli masaüstü, arka uç ve CLI dosyalarının bu kayıt altında incelenmesi;
-uygun bulunursa belirtilen kullanıcı/cihaz grubu ve hedefler için
-kurumsal politikanın tanımlanması.
-
-Ekler: Uygulama kimliği raporu, ilgili başlangıç kaydı, engelleme ekranı,
-imza doğrulama çıktısı ve onaylanacak dağıtımın dosya bilgileri.
-```
-
-Kimlik raporunda bulunan yerel kullanıcı adı ve dosya yollarını paylaşmadan önce kontrol edin. İstek gövdeleri, `Authorization`, çerezler ve erişim anahtarları bu kayıt için gerekli değildir.
-
-Güvenlik ekibi önce engeli üreten katmanı belirler: uygulama çalıştırma politikası, uç nokta ağ denetimi, proxy veya hedef servis yetkilendirmesi. İzin kapsamını uygulamanın gerçek bileşenleri ve iş için gerekli hedeflerle sınırlar; onaylanan paketi küçük bir cihaz grubunda doğrular. Sürüm veya imza değiştiğinde aynı kayıt üzerinden güncelleme yapılır. Genel Electron/Go izni veya güvenlik denetimini kapatma bu talebin kapsamına girmez.
-
-## Salt okunur doğrulama komutları
-
-Aşağıdaki yolları kimlik raporundaki gerçek yollarla değiştirin. Komutlar dosya veya güvenlik politikası değiştirmez.
-
-macOS — uygulama paketini ve arka ucu ayrı inceleyin:
+Kaynak koddan doğrulamak için repository kökünde:
 
 ```bash
-validex_app='/Applications/Validex.app'
-validex_backend="$validex_app/Contents/Resources/validex-backend"
-codesign --display --verbose=4 "$validex_app"
-codesign --display --verbose=4 "$validex_backend"
-codesign --display -r- "$validex_backend"
-codesign --verify --strict --verbose=2 "$validex_backend"
-shasum -a 256 "$validex_app/Contents/MacOS/Validex" "$validex_backend"
-"$validex_backend" --identity
+make build-backend build-cli
+./build/bin/validex-backend --identity
+./build/bin/validex-cli --identity
 ```
 
-`Identifier`, `TeamIdentifier`, `Authority` ve doğrulama sonucunu birlikte iletin. `Signature=adhoc`, `TeamIdentifier=not set` veya imzasızlık çıktısını olduğu gibi kaydedin. `codesign` imza incelemesi, kurumsal erişim onayı değildir. [Apple: imza inceleme](https://developer.apple.com/library/archive/technotes/tn2206/_index.html).
-
-Windows — PowerShell:
-
-```powershell
-$ValidexExecutable = 'C:\kurulum\Validex\resources\validex-backend.exe'
-Get-FileHash -LiteralPath $ValidexExecutable -Algorithm SHA256
-$ValidexSignature = Get-AuthenticodeSignature -LiteralPath $ValidexExecutable
-$ValidexSignature | Format-List Path, Status, StatusMessage, SignatureType
-$ValidexSignature.SignerCertificate | Format-List Subject, Issuer, Thumbprint, NotAfter
-(Get-Item -LiteralPath $ValidexExecutable).VersionInfo |
-  Format-List CompanyName, ProductName, FileVersion, OriginalFilename
-& $ValidexExecutable --identity
-```
-
-`validex.exe` için de aynı incelemeyi yapın. İmza alanlarının boş olması halinde bir yayıncı adı varsaymayın. [Microsoft: Authenticode incelemesi](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.security/get-authenticodesignature?view=powershell-7.5), [SHA-256 hesaplama](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/get-filehash?view=powershell-7.5).
-
-Linux:
+Windows'ta dosya adlarına `.exe` ekleyin. `.deb` kurulumu için:
 
 ```bash
-validex_backend='/kurulum/Validex/resources/validex-backend'
+validex_backend='/usr/lib/validex/resources/validex-backend'
 readlink -f -- "$validex_backend"
-stat -- "$validex_backend"
 sha256sum -- "$validex_backend"
 "$validex_backend" --identity
+dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' validex
 ```
 
-Dağıtımın paket yöneticisiyle kurulduysa paket adı/sürümünü de ekleyin. Bu depodaki klasör tabanlı paket veya `make install-linux` kurulumu için otomatik bir RPM/DEB yayıncı kaydı varsaymayın.
+İmza kontrolü gerekiyorsa kimlik raporundaki dosya yolunu kullanın:
+
+```bash
+# macOS
+codesign --display --verbose=4 /Applications/Validex.app
+codesign --verify --strict /Applications/Validex.app/Contents/Resources/validex-backend
+```
+
+```powershell
+# Windows PowerShell; yolu kurulu dosyayla değiştirin.
+$ValidexBackend = 'C:\kurulum\Validex\resources\validex-backend.exe'
+Get-FileHash -LiteralPath $ValidexBackend -Algorithm SHA256
+Get-AuthenticodeSignature -LiteralPath $ValidexBackend | Format-List
+```
+
+## IT talep metni
+
+```text
+Konu: Validex uygulama kaydı / erişim incelemesi
+Talep sahibi, ekip ve iş amacı:
+Cihaz / işletim sistemi / mimari:
+Paket kaynağı ve sürümü:
+Uygulama kimliği: com.validex.Validex
+Ürün UUID'si: 6a2bf295-cc04-4390-abaf-9ccfcdbc3379
+İlgili bileşen, gerçek dosya yolu ve SHA-256:
+Olay zamanı / saat dilimi / PID:
+İmza sonucu ve varsa yayıncı:
+Güvenlik ürünü / olay veya kural kimliği:
+Gerekli API hedefleri, protokol ve portlar:
+Kullanıcı veya cihaz grubu:
+Ekler: Kimlik raporu ve ilgili olay kaydı.
+```
+
+IT ekibinin masaüstü, arka uç ve kullanılan CLI dosyalarını aynı Validex ürün
+kaydı altında eşleştirmesi için raporu ekleyin. Ayrı kurulan CLI için kendi
+`--identity` çıktısını da ekleyin.
+
+Rapor üretimi [Electron kimlik servisi](../cmd/validex/electron/src/security-identity.ts)
+ve [Go kimlik paketi](../internal/appidentity/identity.go) içinde uygulanır;
+paket üretme komutları [README](../README.md) içinde açıklanır.

@@ -22,6 +22,7 @@ import {
 } from "./identity";
 
 const applicationRoot = resolve(__dirname, "..", "..");
+const buildRoot = resolve(applicationRoot, "..", "..", "build");
 const resourcesRoot = resolve("/runtime", "resources");
 
 function recordingDock(
@@ -49,7 +50,7 @@ test("application icon paths follow development and packaged layouts", () => {
       packaged: false,
       resourcesRoot,
     }),
-    join(applicationRoot, "build", "appicon.png"),
+    join(buildRoot, "appicon.png"),
   );
   equal(
     applicationIconPath({
@@ -65,7 +66,7 @@ test("application icon paths follow development and packaged layouts", () => {
       packaged: false,
       resourcesRoot,
     }),
-    join(applicationRoot, "build", "appicon.png"),
+    join(buildRoot, "appicon.png"),
   );
   equal(
     macDockIconPath({
@@ -162,10 +163,10 @@ test("unbranded development macOS replaces and reinforces the Electron dock icon
 
   deepStrictEqual(calls, [
     "hide",
-    `set:${join(applicationRoot, "build", "appicon.png")}`,
+    `set:${join(buildRoot, "appicon.png")}`,
     "show",
-    `set:${join(applicationRoot, "build", "appicon.png")}`,
-    `set:${join(applicationRoot, "build", "appicon.png")}`,
+    `set:${join(buildRoot, "appicon.png")}`,
+    `set:${join(buildRoot, "appicon.png")}`,
   ]);
 });
 
@@ -183,8 +184,8 @@ test("branded development macOS keeps the Validex dock item visible", async () =
   reinforce();
 
   deepStrictEqual(calls, [
-    `set:${join(applicationRoot, "build", "appicon.png")}`,
-    `set:${join(applicationRoot, "build", "appicon.png")}`,
+    `set:${join(buildRoot, "appicon.png")}`,
+    `set:${join(buildRoot, "appicon.png")}`,
   ]);
 });
 
@@ -223,7 +224,7 @@ test("dock is restored when a development icon cannot be loaded", async () => {
   );
   deepStrictEqual(calls, [
     "hide",
-    `set:${join(applicationRoot, "build", "appicon.png")}`,
+    `set:${join(buildRoot, "appicon.png")}`,
     "show",
   ]);
 });
@@ -231,9 +232,9 @@ test("dock is restored when a development icon cannot be loaded", async () => {
 test("desktop and frontend icon assets stay identical", async () => {
   const [desktopPNG, frontendPNG, desktopSVG, frontendSVG] =
     await Promise.all([
-      readFile(join(applicationRoot, "build", "appicon.png")),
+      readFile(join(buildRoot, "appicon.png")),
       readFile(join(applicationRoot, "frontend", "public", "appicon.png")),
-      readFile(join(applicationRoot, "build", "appicon.svg"), "utf8"),
+      readFile(join(buildRoot, "appicon.svg"), "utf8"),
       readFile(
         join(applicationRoot, "frontend", "public", "appicon.svg"),
         "utf8",

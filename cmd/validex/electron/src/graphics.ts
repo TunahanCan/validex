@@ -8,6 +8,8 @@ export interface GraphicsCompatibilityController {
 export interface GraphicsCompatibilityOptions {
   arguments?: readonly string[];
   environment?: Readonly<Record<string, string | undefined>>;
+  /** Backend already selected by Electron before application startup. */
+  ozonePlatform?: string;
   platform?: NodeJS.Platform;
 }
 
@@ -17,18 +19,20 @@ function commandLineValue(
 ): string | undefined {
   const exact = `--${name}`;
   const prefix = `${exact}=`;
+  let selectedValue: string | undefined;
   for (let index = 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
+    if (argument === "--") break;
     if (argument?.startsWith(prefix)) {
       const value = argument.slice(prefix.length).trim();
-      return value === "" ? undefined : value;
+      selectedValue = value === "" ? undefined : value;
     }
     if (argument === exact) {
       const value = arguments_[index + 1]?.trim();
-      return value === "" ? undefined : value;
+      selectedValue = !value || value.startsWith("--") ? undefined : value;
     }
   }
-  return undefined;
+  return selectedValue;
 }
 
 /**
@@ -38,16 +42,17 @@ function commandLineValue(
 export function requiresWaylandGraphicsFallback({
   arguments: arguments_ = process.argv,
   environment = process.env,
+  ozonePlatform: selectedPlatform,
   platform = process.platform,
 }: GraphicsCompatibilityOptions = {}): boolean {
   if (platform !== "linux") return false;
 
-  const ozonePlatform = commandLineValue(
-    arguments_,
-    "ozone-platform",
-  )?.toLowerCase();
-  if (ozonePlatform === "x11") return false;
-  if (ozonePlatform === "wayland") return true;
+  const ozonePlatform = (
+    selectedPlatform || commandLineValue(arguments_, "ozone-platform")
+  )?.trim().toLowerCase();
+  if (ozonePlatform && ozonePlatform !== "auto") {
+    return ozonePlatform === "wayland";
+  }
 
   return (
     environment.XDG_SESSION_TYPE?.trim().toLowerCase() === "wayland" ||
@@ -65,14 +70,22 @@ function withDisabledFeature(value: string, feature: string): string {
 }
 
 /**
- * Chromium 150 can select an incompatible Vulkan path on native Wayland.
- * Disable only Vulkan instead of disabling GPU compositing altogether.
+ * Electron selects Ozone before loading the main script. Use that backend
+ * instead of inferring native Wayland from session metadata under XWayland.
+ * Chromium 150 can initialize Vulkan through WebGPU/GL interop even when the
+ * Vulkan feature is disabled. Select its OpenGL ES adapter on native Wayland
+ * so GPU compositing and compositor presentation feedback stay enabled.
  */
 export function configureGraphicsCompatibility(
   application: GraphicsCompatibilityController,
   options: GraphicsCompatibilityOptions = {},
 ): boolean {
-  if (!requiresWaylandGraphicsFallback(options)) return false;
+  if (!requiresWaylandGraphicsFallback({
+    ...options,
+    ozonePlatform:
+      application.commandLine.getSwitchValue("ozone-platform") ||
+      options.ozonePlatform,
+  })) return false;
   const disabledFeatures = withDisabledFeature(
     application.commandLine.getSwitchValue("disable-features"),
     "Vulkan",
@@ -81,5 +94,8 @@ export function configureGraphicsCompatibility(
     "disable-features",
     disabledFeatures,
   );
+  if (!application.commandLine.getSwitchValue("use-webgpu-adapter")) {
+    application.commandLine.appendSwitch("use-webgpu-adapter", "opengles");
+  }
   return true;
 }

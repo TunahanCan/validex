@@ -77,6 +77,60 @@ test("X11 and non-Linux runtimes retain their graphics defaults", () => {
   }
 });
 
+test("the selected Ozone backend takes precedence over stale environment and argv", () => {
+  for (const ozonePlatform of ["x11", "headless"]) {
+    const calls: string[] = [];
+    equal(configureGraphicsCompatibility({
+      commandLine: {
+        appendSwitch(name: string) { calls.push(name); },
+        getSwitchValue(name: string) {
+          return name === "ozone-platform" ? ozonePlatform : "";
+        },
+      },
+    }, {
+      arguments: ["validex", "--ozone-platform=wayland"],
+      environment: { WAYLAND_DISPLAY: "wayland-0", XDG_SESSION_TYPE: "wayland" },
+      platform: "linux",
+    }), false);
+    deepStrictEqual(calls, []);
+  }
+});
+
+test("an already-selected native Wayland backend gets Vulkan compatibility", () => {
+  const calls: [string, string | undefined][] = [];
+  equal(configureGraphicsCompatibility({
+    commandLine: {
+      appendSwitch(name: string, value?: string) { calls.push([name, value]); },
+      getSwitchValue(name: string) {
+        if (name === "ozone-platform") return "wayland";
+        return name === "disable-features" ? "ExistingFeature" : "";
+      },
+    },
+  }, {
+    arguments: ["validex"],
+    environment: { XDG_SESSION_TYPE: "x11" },
+    platform: "linux",
+  }), true);
+  deepStrictEqual(calls, [
+    ["disable-features", "ExistingFeature,Vulkan"],
+    ["use-webgpu-adapter", "opengles"],
+  ]);
+});
+
+test("argument fallback respects the final backend and the option terminator", () => {
+  for (const arguments_ of [
+    ["validex", "--ozone-platform=wayland", "--ozone-platform=x11"],
+    ["validex", "--ozone-platform", "wayland", "--ozone-platform", "headless"],
+    ["validex", "--ozone-platform=x11", "--", "--ozone-platform=wayland"],
+  ]) {
+    equal(requiresWaylandGraphicsFallback({
+      arguments: arguments_,
+      environment: { XDG_SESSION_TYPE: "wayland" },
+      platform: "linux",
+    }), false);
+  }
+});
+
 test("native Wayland disables Vulkan without disabling GPU compositing", () => {
   const calls: [string, string | undefined][] = [];
   const application = {
@@ -108,6 +162,7 @@ test("native Wayland disables Vulkan without disabling GPU compositing", () => {
   );
   deepStrictEqual(calls, [
     ["disable-features", "ExistingFeature,Vulkan"],
+    ["use-webgpu-adapter", "opengles"],
   ]);
 });
 
@@ -118,8 +173,8 @@ test("native Wayland preserves existing disabled Chromium features", () => {
       appendSwitch(name: string, value?: string) {
         calls.push([name, value]);
       },
-      getSwitchValue() {
-        return "ExistingFeature";
+      getSwitchValue(name: string) {
+        return name === "disable-features" ? "ExistingFeature" : "";
       },
     },
   };
@@ -131,5 +186,20 @@ test("native Wayland preserves existing disabled Chromium features", () => {
   });
   deepStrictEqual(calls, [
     ["disable-features", "ExistingFeature,Vulkan"],
+    ["use-webgpu-adapter", "opengles"],
   ]);
+});
+
+test("native Wayland preserves an explicit WebGPU adapter", () => {
+  const calls: [string, string | undefined][] = [];
+  configureGraphicsCompatibility({
+    commandLine: {
+      appendSwitch(name: string, value?: string) { calls.push([name, value]); },
+      getSwitchValue(name: string) {
+        if (name === "ozone-platform") return "wayland";
+        return name === "use-webgpu-adapter" ? "vulkan" : "";
+      },
+    },
+  }, { platform: "linux" });
+  deepStrictEqual(calls, [["disable-features", "Vulkan"]]);
 });

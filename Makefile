@@ -2,11 +2,13 @@ APP_DIR := cmd/validex
 BACKEND_DIR := cmd/validex-backend
 CLI_DIR := cmd/validex-cli
 FRONTEND_DIR := $(APP_DIR)/frontend
-BUILD_DIR := $(APP_DIR)/build/bin
+BUILD_ROOT := build
+BUILD_DIR := $(BUILD_ROOT)/bin
 NPM_STAMP := $(APP_DIR)/node_modules/.validex-deps-stamp
 DEV_HOST := 127.0.0.1
 DEV_PREFERRED_PORT := 34116
 HOST_GOOS := $(shell go env GOOS)
+APP_HOST_GOOS := $(shell go env GOHOSTOS)
 APP_ID := com.validex.Validex
 THIRD_PARTY_NOTICES := THIRD_PARTY_NOTICES.md
 LINUX_INSTALL_PREFIX ?= $(HOME)/.local
@@ -20,7 +22,7 @@ BACKEND_BINARY := $(BUILD_DIR)/validex-backend
 CLI_BINARY := $(BUILD_DIR)/validex-cli
 endif
 
-.PHONY: check-node-tools deps dev build build-backend build-cli install-linux test test-e2e test-production
+.PHONY: check-node-tools deps dev build build-backend build-cli linux_app windows_app macos_app cache_del install-linux test test-e2e test-production
 
 check-node-tools:
 	@command -v node >/dev/null 2>&1 || { echo "Node.js is required but was not found in PATH." >&2; exit 1; }
@@ -69,11 +71,6 @@ dev: deps build-backend
 		fi; \
 		sleep 0.1; \
 	done; \
-	if [ -n "$${XDG_DATA_DIRS_VSCODE_SNAP_ORIG:-}" ]; then \
-		XDG_DATA_DIRS="$$XDG_DATA_DIRS_VSCODE_SNAP_ORIG"; \
-		export XDG_DATA_DIRS; \
-		unset GSETTINGS_SCHEMA_DIR XDG_DATA_HOME; \
-	fi; \
 	cd $(APP_DIR); \
 	unset ELECTRON_RUN_AS_NODE; \
 	$(NPM) run start -- \
@@ -87,6 +84,24 @@ ifeq ($(HOST_GOOS),darwin)
 	node $(APP_DIR)/scripts/build-mac-icon.mjs
 endif
 	node $(APP_DIR)/scripts/package-electron.mjs
+
+linux_app:
+	@test "$(APP_HOST_GOOS)" = "linux" || { echo "linux_app must be run on Linux; cross-platform packaging is not supported." >&2; exit 1; }
+	@command -v dpkg-deb >/dev/null 2>&1 || { echo "dpkg-deb is required; install the Debian packaging tools with: sudo apt install dpkg-dev" >&2; exit 1; }
+	@command -v dpkg-shlibdeps >/dev/null 2>&1 || { echo "dpkg-shlibdeps is required; install it with: sudo apt install dpkg-dev" >&2; exit 1; }
+	$(MAKE) build
+	node $(APP_DIR)/scripts/package-deb.mjs
+
+windows_app:
+	@test "$(APP_HOST_GOOS)" = "windows" || { echo "windows_app must be run on Windows; cross-platform packaging is not supported." >&2; exit 1; }
+	$(MAKE) build
+
+macos_app:
+	@test "$(APP_HOST_GOOS)" = "darwin" || { echo "macos_app must be run on macOS; cross-platform packaging is not supported." >&2; exit 1; }
+	$(MAKE) build
+
+cache_del:
+	node $(APP_DIR)/scripts/clean-cache.mjs
 
 install-linux: build
 ifeq ($(HOST_GOOS),linux)
@@ -105,10 +120,10 @@ ifeq ($(HOST_GOOS),linux)
 	ln -sfn "$$install_root/validex" "$$executable"; \
 	install -Dm644 "$(THIRD_PARTY_NOTICES)" \
 		"$$install_prefix/share/doc/validex/THIRD_PARTY_NOTICES.md"; \
-	install -Dm644 "$(APP_DIR)/build/appicon.svg" \
+	install -Dm644 "$(BUILD_ROOT)/appicon.svg" \
 		"$$install_prefix/share/icons/hicolor/scalable/apps/$(APP_ID).svg"; \
 	sed "s|@VALIDEX_EXEC@|$$executable|g" \
-		"$(APP_DIR)/build/linux/$(APP_ID).desktop.in" > "$$desktop_file"; \
+		"$(BUILD_ROOT)/linux/$(APP_ID).desktop.in" > "$$desktop_file"; \
 	if command -v desktop-file-validate >/dev/null 2>&1; then \
 		desktop-file-validate "$$desktop_file"; \
 	fi; \

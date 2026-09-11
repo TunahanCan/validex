@@ -24,7 +24,7 @@ test("the shell accepts the packager's development marker and uses source icons"
   };
   const packaged = isPackagedApplicationRuntime(options);
   assert.equal(packaged, false);
-  assert.equal(applicationIconPath({ applicationRoot: "/workspace", resourcesRoot: "/runtime/Resources", packaged }),
+  assert.equal(applicationIconPath({ applicationRoot: "/workspace/cmd/validex", resourcesRoot: "/runtime/Resources", packaged }),
     join("/workspace", "build", "appicon.png"));
   assert.equal(isPackagedApplicationRuntime({ ...options, developmentRuntime: undefined }), true);
   assert.equal(isPackagedApplicationRuntime({ ...options, developmentMarker: { ...marker, schema: -1 } }), true);

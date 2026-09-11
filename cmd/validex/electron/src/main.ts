@@ -98,7 +98,7 @@ async function saveIdentity(appendStartup = false): Promise<void> {
 async function initializeIdentity(backend: string): Promise<void> {
   const packaged = packagedApplication();
   const root = app.getAppPath();
-  const binaryRoot = packaged ? process.resourcesPath : join(root, "build", "bin");
+  const binaryRoot = packaged ? process.resourcesPath : resolve(root, "..", "..", "build", "bin");
   applicationIdentity = await collectApplicationIdentity({
     manifestPath: packaged
       ? join(process.resourcesPath, "application-identity.json")
@@ -275,7 +275,7 @@ function backendExecutable(): string {
   if (override !== undefined && override !== "") {
     return isAbsolute(override) ? override : resolve(process.cwd(), override);
   }
-  return resolve(app.getAppPath(), "build", "bin", executableName());
+  return resolve(app.getAppPath(), "..", "..", "build", "bin", executableName());
 }
 
 function frontendRoot(): string {

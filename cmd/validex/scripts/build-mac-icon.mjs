@@ -42,7 +42,7 @@ async function currentIcon(sourceHash, output, markerPath) {
 export async function buildMacIcon(root = applicationRoot) {
   if (process.platform !== "darwin") return undefined;
 
-  const buildRoot = join(resolve(root), "build");
+  const buildRoot = resolve(root, "..", "..", "build");
   const source = join(buildRoot, "appicon.png");
   const output = join(buildRoot, "Validex.icns");
   const markerPath = join(buildRoot, ".validex-mac-icon.json");

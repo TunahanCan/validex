@@ -1,4 +1,4 @@
-import { basename, join } from "node:path";
+import { basename, join, resolve } from "node:path";
 
 export const applicationID = "com.validex.Validex";
 export const applicationName = "Validex";
@@ -82,7 +82,7 @@ export function applicationIconPath(
 ): string {
   return location.packaged
     ? join(location.resourcesRoot, "frontend", "appicon.png")
-    : join(location.applicationRoot, "build", "appicon.png");
+    : resolve(location.applicationRoot, "..", "..", "build", "appicon.png");
 }
 
 export function macDockIconPath(

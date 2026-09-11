@@ -1,289 +1,231 @@
-<p align="center">
-  <img src="cmd/validex/build/appicon.svg" width="144" height="144" alt="Validex uygulama ikonu">
-</p>
+# Validex
 
-<h1 align="center">Validex</h1>
+<img src="build/appicon.svg" width="80" height="80" alt="Validex ikonu">
 
-<p align="center">
-  <strong>API geliştirme, test ve hata ayıklama için yerel masaüstü çalışma alanı.</strong>
-</p>
+Validex, HTTP API'leriyle çalışmak için bir masaüstü uygulamasıdır. İstek
+hazırlama, koleksiyon kaydetme, OpenAPI inceleme, mock sunucu ve performans
+ölçümünü aynı arayüzde sunar. Masaüstü kabuğu Electron, ağ ve dosya işlemleri
+Go ile çalışır. Arayüz Türkçe ve İngilizce kullanılabilir.
 
-<p align="center">
-  HTTP Requests · Collections · OpenAPI · Mock Server · JSON Lab · Diagnostics · Performance · CLI
-</p>
+Otomasyon için aynı Go servislerini kullanan `validex-cli` bulunur.
 
-Validex; HTTP isteği hazırlama, yanıt inceleme, koleksiyon yönetimi ve API
-testlerini tek uygulamada toplar. Hesap gerektirmez; koleksiyonlar
-bilgisayarınızda saklanır, API istekleri Go arka ucundan hedef sunucuya gönderilir.
-macOS, Linux ve Windows için Electron masaüstü uygulaması; otomasyon için
-ayrıca bağımsız bir CLI sunar. Arayüz Türkçe ve İngilizce kullanılabilir.
+## Kaynak koddan çalıştırma
 
-## Özellikler
+Gereken araçlar:
 
-| Alan | Yapabilecekleriniz |
-| --- | --- |
-| Requests | Method, URL, query, header ve body düzenleme; cURL içe aktarma; yanıt, cookie ve bağlantı zamanlamasını inceleme. |
-| Collections | Koleksiyon ve klasörlerle istekleri düzenleme, kaydetme, taşıma; Postman Collection v2.1 içe/dışa aktarma. |
-| OpenAPI | YAML/JSON belge yükleme, endpoint’ten istek oluşturma ve yanıtın sözleşmeden sapmalarını inceleme. |
-| Mock Server | Elle veya OpenAPI’den route oluşturma; durum kodu, header, body ve gecikme tanımlama. |
-| JSON Lab | JSON biçimlendirme, karşılaştırma, JSON Path sorgulama, şema çıkarma ve örnek veri üretme; Firefox, GitHub ve Dracula renk paletleri. |
-| Diagnostics | Spring hataları, JWT, Actuator, thread dump, log arama ve ortam farklarını inceleme. |
-| Performance | Eşzamanlı istekler, ısınma ve kademeli yük artışı; gecikme, yüzdelikler, throughput, hata hedefleri ve Apdex; grafikler, referans karşılaştırması, oturum geçmişi ve JSON/CSV raporları. |
-| CLI | Koleksiyon çalıştırma, ağ inceleme ve OpenAPI lint işlemlerini terminalde veya CI içinde kullanma. |
+- Go 1.24 veya üzeri.
+- Node.js 22.12 veya üzeri.
+- npm ya da Corepack.
+- GNU Make ve `curl`.
 
-## Hızlı başlangıç
-
-Kaynak koddan masaüstü uygulamasını çalıştırmak için:
-
-- Go **1.24+**
-- Node.js **22.12+**
-- npm veya Corepack
-- GNU Make ve `curl`
-
-Repository kökünde:
+Aşağıdaki komutları, aksi belirtilmedikçe bu README'nin bulunduğu proje
+kökünde çalıştırın:
 
 ```bash
 make dev
 ```
 
-Komut eksik npm bağımlılıklarını kurar, Go arka ucunu ve Electron kabuğunu
-derler, TypeScript geliştirme sunucusuyla masaüstü uygulamasını açar.
-Sunucu `127.0.0.1` üzerinde dinler; `34116` doluysa uygun bir port seçilir.
-Go veya Electron kaynaklarını değiştirdiğinizde `make dev` komutunu yeniden
-başlatın.
+Bu komut npm bağımlılıklarını hazırlar, Go arka ucunu ve Electron kodunu
+derler, arayüz geliştirme sunucusunu başlatır ve uygulamayı açar. Sunucu
+`127.0.0.1` üzerinde boş bir port kullanır; ilk tercih `34116` olur.
+Arayüz kaynakları değiştiğinde yeniden derlenir. Go veya Electron kodundaki
+değişiklikler için komutu durdurup yeniden başlatın.
 
-Windows’ta Make hedeflerini GNU Make ve `curl` erişilebilir olan Git Bash
-üzerinden çalıştırın. PowerShell ile paketleme adımları
-[CI yapılandırmasında](.github/workflows/ci.yml) bulunur.
+Windows'ta GNU Make ve `curl` erişilebilir olan Git Bash kullanın. Linux'ta
+grafik masaüstü kitaplıkları, yerel dosya seçimleri için de `zenity` veya
+`kdialog` gerekir.
 
-Yalnız bağımlılıkları hazırlamak için `make deps` kullanın. Make, PATH’te
-`npm` bulamazsa Corepack üzerinden npm çalıştırmayı dener. Doğrudan kurulum:
-
-```bash
-cd cmd/validex
-npm ci
-```
-
-### İlk deneme
-
-1. **Requests** alanında bir HTTP isteği oluşturup kendi API’nize gönderin.
-2. Yanıtın durum kodunu, body’sini, header’larını ve zamanlamasını inceleyin.
-3. İsteği bir koleksiyona kaydedip tekrar kullanın; otomatik testler için [CLI koleksiyon çalıştırma](#koleksiyon-çalıştırma) örneğini izleyin.
-4. [openapi.sample.yaml](openapi.sample.yaml) dosyasını yükleyerek OpenAPI ve mock server akışlarını deneyin.
-
-Hazır bir yerel API için ayrı terminalde aşağıdaki test sunucusunu açabilirsiniz:
+Yalnız tarayıcı arayüzünü geliştirmek için:
 
 ```bash
-cd tests/e2e
-go run ./cmd/mock-api -addr 127.0.0.1:18080 -environment primary
-```
-
-Ardından Requests alanından `GET http://127.0.0.1:18080/actuator/health`
-isteğini gönderin. Bu sunucu ayrıca JSON, XML, metin, binary, Problem Details,
-yönlendirme, yavaş istek ve SSE senaryoları sağlar.
-`GET /__validex/stats` sayaçları gösterir; `POST /__validex/reset` sıfırlar.
-
-### Yalnız arayüzü geliştirme
-
-Bağımlılıkları kurduktan sonra repository kökünde:
-
-```bash
+make deps
 node cmd/validex/frontend/scripts/dev.mjs
 ```
 
-Arayüzü `http://127.0.0.1:34116` adresinde açın. Bu profilde Go arka ucu ve
-masaüstü köprüsü çalışmaz; gerçek API istekleri, yerel dosya seçimi ve masaüstü
-koleksiyon kaydı için `make dev` kullanın. Tarayıcı profilindeki koleksiyonlar
-`localStorage` içinde tutulur.
+Sunucunun yazdığı adresi tarayıcıda açın. Bu kullanımda Electron–Go bağlantısı
+kurulmaz; masaüstü dosya işlemleri ve gerçek arka uç çağrıları için `make dev`
+kullanın. Arayüz araçlarının ayrıntıları
+[frontend geliştirme rehberindedir](cmd/validex/frontend/TYPESCRIPT_ONLY_TOOLCHAIN.md).
 
-## Koleksiyon aktarımı ve veri saklama
+## Uygulama paketi oluşturma
 
-Postman **Collection v2.1** dosyaları içe ve dışa aktarılabilir. İçe aktarımda
-klasör yolları istek adlarına dönüştürülür. Script/test kodları, değişken
-değerleri ve kayıtlı yanıt örnekleri aktarılmaz; değişken referansları korunur.
-Desteklenmeyen auth, body ve taşıma ayarları için aktarım uyarılarını inceleyin.
+Her hedefi kendi işletim sisteminde çalıştırın:
 
-Masaüstü koleksiyon kütüphanesi `os.UserConfigDir()` altındaki
-`Validex/collection-library.json` dosyasında saklanır:
+| Komut | Sistem | Oluşturulan uygulama |
+| --- | --- | --- |
+| `make linux_app` | Debian/Ubuntu tabanlı Linux | `build/bin/validex_<sürüm>_<mimari>.deb` |
+| `make windows_app` | Windows | `build/bin/Validex/validex.exe` ve yanındaki dosyalar |
+| `make macos_app` | macOS | `build/bin/Validex.app` |
 
-| Platform | Varsayılan konum |
+Sürüm [masaüstü paket tanımından](cmd/validex/package.json), mimari derleme
+yapılan makineden alınır. Windows ve Linux uygulama klasörlerini taşırken
+klasörün tamamını kopyalayın. macOS `.app` paketi varsayılan olarak yerel
+ad-hoc imzayla hazırlanır.
+
+Paketleme ve Go çıktıları proje kökündeki `build/bin/` altında toplanır.
+`build/` ayrıca platform ikonlarını ve Linux masaüstü şablonunu içerir.
+`make build`, geçerli sistemin uygulama klasörünü ve CLI'sini üretir;
+Linux'ta `.deb` adımı için `make linux_app` kullanılır.
+
+### Linux kurulumu
+
+`.deb` üretmek için paketleme araçlarını da kurun:
+
+```bash
+sudo apt install dpkg-dev
+make linux_app
+```
+
+Oluşan dosyayı APT ile kurun. Örneğin, `0.2.0` sürümü ve `amd64` mimarisi için:
+
+```bash
+sudo apt install ./build/bin/validex_0.2.0_amd64.deb
+```
+
+Dosya adını kendi derlemenizde oluşan adla eşleştirin. Aynı sürümü yeniden
+kuracaksanız `apt install` komutuna `--reinstall` ekleyin. APT gerekli sistem
+kitaplıklarını da kurar. Bu bağımlılıklar derleme sisteminden çıkarıldığı için
+başka dağıtım sürümlerine dağıtacağınız paketi hedef sistemle uyumlu bir ortamda
+üretin.
+
+Kurulumdan sonra menüden **Validex**'i açabilir veya terminali kullanabilirsiniz:
+
+```bash
+validex
+validex-cli --help
+```
+
+Masaüstü uygulaması ve arka uç `/usr/lib/validex/`, komut girişleri
+`/usr/bin/` altındadır. `.deb` dosyasının SHA-256 özeti aynı dizindeki
+`.deb.sha256` dosyasına yazılır.
+
+Kullanıcı hesabına klasör olarak kurulum için `make install-linux`
+kullanılabilir. Varsayılan kök `~/.local` olur; başka bir konum
+`LINUX_INSTALL_PREFIX=/kurulum/koku` ile seçilir. Bu hedef masaüstü uygulaması
+ve menü girdisini kurar; ayrı CLI, `build/bin/validex-cli` olarak kalır.
+
+### Kurulumdan sonra menü eski arayüzü açıyorsa
+
+Önce `/usr/bin/validex` ile `.deb` paketinin uygulamasını doğrudan açın.
+Bu uygulama güncel olduğu halde menü farklı bir sürüm açıyorsa
+`~/.local/share/applications/com.validex.Validex.desktop` dosyasının `Exec`
+ve `TryExec` alanlarını kontrol edin. Kullanıcıya özel bu dosya, paketin
+`/usr/share/applications/` altındaki menü girdisinden önce seçilir.
+
+`.deb` kurulumunu kullanmak için eski kullanıcı kısayolunu yedekleyip
+uygulamalar dizininden taşıyın ve `update-desktop-database ~/.local/share/applications`
+çalıştırın. `~/.local/bin/validex` altında ayrı bir eski uygulama varsa onu da
+yedekleyip `/usr/bin/validex` bağlantısıyla değiştirin. Böylece menü ve terminal
+aynı kurulumu açar. Bu işlem koleksiyon veya uygulama ayarlarını silmeyi gerektirmez.
+
+## Derleme çıktılarını temizleme
+
+Geliştirme sunucusunu ve çalışan testleri kapattıktan sonra proje kökünde:
+
+```bash
+make cache_del
+```
+
+Bu komut `build/bin/` içindeki uygulama, CLI ve `.deb` çıktılarını,
+`build/dev/` dizinini, frontend/Electron derlemelerini, derleme geçici
+dosyalarını ve E2E test çıktılarını temizler. `build/` içindeki kaynak ikonlar
+ve Linux masaüstü şablonu, `.gitkeep` dosyaları, npm bağımlılıkları ve
+koleksiyon/ayar dosyaları korunur. Sonraki `make dev` veya platform paketleme
+komutu gerekli çıktıları yeniden oluşturur.
+
+`cache_del` kurulu uygulamayı kaldırmaz. Linux sistem paketini kaldırmak için:
+
+```bash
+sudo apt remove validex
+```
+
+## Arayüzde çalışma
+
+| Alan | Kullanım |
 | --- | --- |
-| macOS | `~/Library/Application Support/Validex/collection-library.json` |
-| Linux | `~/.config/Validex/collection-library.json` (`XDG_CONFIG_HOME` ayarlıysa onun altında) |
-| Windows | `%AppData%\Validex\collection-library.json` |
+| Requests | HTTP isteği oluşturma, cURL içe aktarma, yanıtı ve bağlantı zamanlarını inceleme. Koleksiyonlar ve OpenAPI'den alınan endpoint'ler bu alanın yan panelindedir. |
+| Mock Server | Route tanımlama veya OpenAPI'den aktarma, yerel mock sunucusunu başlatma ve gelen istekleri izleme. |
+| JSON Lab | JSON biçimlendirme, karşılaştırma, JSON Path, şema ve örnek veri araçları. |
+| Diagnostics | Spring hata metinleri, JWT, Actuator, thread dump, log, ortam karşılaştırması ve endpoint kapsamı inceleme. |
+| Performance | Bir URL için örnek sayısı, eşzamanlılık ve ısınma ayarlama; gecikme, throughput ve hata ölçümlerini karşılaştırıp dışa aktarma. |
 
-Tema, açık sekmeler ve panel düzeni Chromium profilindeki `localStorage`
-içinde tutulur. Eski WebView sürümünden gelen koleksiyon dosyası korunur;
-arayüz tercihleri Chromium’a otomatik taşınmaz.
+Koleksiyonlar Postman Collection v2.1 biçiminde içe ve dışa aktarılabilir.
+İçe aktarma sonucundaki uyarılar, dönüştürülemeyen alanları gösterir.
+OpenAPI işlemlerini denemek için [örnek sözleşmeyi](openapi.sample.yaml)
+kullanabilirsiniz.
 
-Koleksiyon dosyası şifreli değildir. Arayüz, kaydederken hassas olarak tanınan
-header değerlerini temizler; `{{variable}}` referanslarını koruyabilir. Bu
-mekanizma body veya URL içindeki tüm hassas verileri temizleyen bir kasa
-değildir. Çalışma anındaki değerleri değişkenlerle sağlayın; paylaşacağınız
-koleksiyonun içeriğini kontrol edin.
+### Yerel bir API ile deneme
 
-## CLI kullanımı
+Ayrı bir terminalde proje kökünden test sunucusunu başlatın:
 
-CLI'yi çalıştırmak için Node.js veya Electron gerekmez. Sürüm ve platform
-metaverisini hazırlayan `make build-cli` komutu Go, Node.js ve GNU Make gerektirir:
+```bash
+cd tests/e2e
+go run ./cmd/mock-api -addr 127.0.0.1:18080
+```
+
+Uygulamada `GET http://127.0.0.1:18080/actuator/health` isteği oluşturup
+gönderin. Yanıtın HTTP durumu `200`, JSON içindeki `status` değeri `UP` olur.
+İsteği bir koleksiyona kaydedip tekrar açabilirsiniz. Sunucuyu `Ctrl+C` ile
+kapatın.
+
+## CLI ile otomasyon
+
+CLI'yi kaynak koddan hazırlayın:
 
 ```bash
 make build-cli
-./cmd/validex/build/bin/validex-cli --help
+./build/bin/validex-cli --help
 ```
 
-Yalnız Go ile derlemek için:
+Aşağıdaki örnekler proje kökünde çalıştırılır. `inspect` ve `run` örnekleri,
+yukarıdaki yerel API'nin açık olmasını bekler:
 
 ```bash
-go build -o validex-cli ./cmd/validex-cli
-./validex-cli --help
-```
+./build/bin/validex-cli inspect \
+  --url http://127.0.0.1:18080/actuator/health --json
 
-Bu alternatif varsayılan `development` sürüm metaverisini kullanır; paketleme
-betiğinin platforma özel marka ve imza adımlarını uygulamaz.
-`go run ./cmd/validex-cli --help` ile de çalıştırabilirsiniz.
-Windows'ta Make çıktısı `validex-cli.exe` olur; doğrudan `go build` komutunda
-`-o validex-cli.exe` kullanın.
+./build/bin/validex-cli lint --file openapi.sample.yaml --json
 
-### Koleksiyon çalıştırma
-
-CLI, Validex runner JSON formatını kullanır; örnek tanım
-[collection.sample.json](collection.sample.json) içindedir. Bu format,
-masaüstünün koleksiyon kütüphanesi veya Postman dışa aktarım dosyasıyla aynı değildir.
-
-Yukarıdaki yerel test sunucusu açıkken repository kökünde:
-
-```bash
-./cmd/validex/build/bin/validex-cli run \
-  --file collection.sample.json \
-  --variables - <<'JSON'
+./build/bin/validex-cli run \
+  --file collection.sample.json --variables - --json <<'JSON'
 {"baseUrl":"http://127.0.0.1:18080"}
 JSON
 ```
 
-Bu örnek `/actuator/health` yanıtında HTTP 200, `$.status == "UP"` ve iki
-saniyenin altında yanıt süresi bekler. `--variables` bir JSON dosyası da alır;
-değerler string olmalıdır ve koleksiyondaki aynı adlı değişkenleri geçersiz kılar.
-Makine tarafından işlenecek rapor için `--json` ekleyin.
+`run`, [örnek koleksiyondaki](collection.sample.json) Validex runner JSON
+biçimini kullanır. Bu dosya, masaüstünün koleksiyon kayıt dosyası veya Postman
+dışa aktarımıyla aynı biçimde değildir. `--variables` ile bir JSON dosyası da
+verilebilir. Komut seçenekleri `run --help`, `inspect --help` ve `lint --help`
+ile görüntülenir. Windows'ta kaynak derleme çıktısının adına `.exe` ekleyin.
 
-### Ağ inceleme ve OpenAPI lint
+Çıkış kodu `0` başarıyı, `1` işlem veya doğrulama başarısızlığını, `2` komut
+kullanım hatasını belirtir. `lint --strict`, uyarıları da başarısızlık sayar.
 
-```bash
-./cmd/validex/build/bin/validex-cli inspect \
-  --url http://127.0.0.1:18080/actuator/health \
-  --timeout 15s --max-redirects 10 --json
+## Verilerin konumu
 
-./cmd/validex/build/bin/validex-cli lint \
-  --file openapi.sample.yaml --json
-```
+Masaüstü koleksiyon kütüphanesi yerel bir JSON dosyasında tutulur:
 
-`lint --strict`, uyarıları da başarısızlık sayar. `run` ve `lint` için
-`--file -` standart girdiden okur; `--file` ve `--variables` aynı anda standart
-girdi kullanamaz. Her komutun seçenekleri `<komut> --help` ile görülebilir.
-
-| Çıkış kodu | Anlamı |
+| Sistem | Varsayılan yol |
 | --- | --- |
-| `0` | Başarılı işlem. |
-| `1` | İşlem hatası, başarısız koleksiyon testi veya lint bulguları nedeniyle başarısız sonuç. |
-| `2` | Eksik/geçersiz argüman veya bilinmeyen komut. |
+| Linux | `~/.config/Validex/collection-library.json` |
+| macOS | `~/Library/Application Support/Validex/collection-library.json` |
+| Windows | `%AppData%\Validex\collection-library.json` |
 
-## Derleme ve paketleme
+Linux'ta `XDG_CONFIG_HOME` ayarlanmışsa onun altındaki `Validex/` dizini
+kullanılır. Arayüz tercihleri uygulama profilinin `localStorage` alanına
+kaydedilir. Koleksiyon dosyası şifrelenmez; yedekleme veya aktarım yaparken
+koleksiyon içeriğini esas alın.
 
-Geçerli işletim sistemi ve CPU mimarisi için:
-
-```bash
-make build
-```
-
-| Platform | Masaüstü çıktısı | Çalıştırma |
-| --- | --- | --- |
-| macOS | `cmd/validex/build/bin/Validex.app` | `open cmd/validex/build/bin/Validex.app` |
-| Linux | `cmd/validex/build/bin/Validex/` | `./cmd/validex/build/bin/Validex/validex` |
-| Windows | `cmd/validex/build/bin/Validex/` | PowerShell: `.\cmd\validex\build\bin\Validex\validex.exe` |
-
-CLI de `cmd/validex/build/bin/` altında üretilir. Linux ve Windows’ta
-`Validex` klasörünün tamamını birlikte taşıyın; Chromium, arayüz ve Go arka
-ucu paketin parçalarıdır.
-
-- macOS çıktısı yerel kullanım için ad-hoc imzalanır. Dağıtım için Developer ID imzası ve notarization ayrıca hazırlanmalıdır.
-- Linux’ta yerel dosya seçimi için `zenity` veya `kdialog`, uygulama için dağıtımın GUI kitaplıkları gerekir.
-- Electron kendi Chromium motorunu içerir; sistem WebView2 veya WebKitGTK kurulumuna bağlı değildir.
-
-Paketleme betiği çalıştırılabilir uygulama klasörü üretir. Installer, otomatik
-güncelleme, cross-build ve yayın imzalama hattı bu repository’de sağlanmaz.
-
-Linux’ta kullanıcı hesabına kurulum:
-
-```bash
-make install-linux
-# İsteğe bağlı farklı kurulum kökü:
-make install-linux LINUX_INSTALL_PREFIX=/your/install/prefix
-```
-
-Varsayılan kök `~/.local` dizinidir; komut uygulamayı derler, kurar ve masaüstü
-menü girdisini oluşturur.
-
-## Kurumsal güvenlik kaydı
-
-Masaüstü kabuğu, Go arka ucu ve CLI aynı `com.validex.Validex` uygulama
-kimliğini ve sabit ürün UUID'sini kullanır. Bileşenler tek ürün kaydı altında
-`desktop`, `backend`, `cli` rolleri ve gerçek dosya yollarıyla ayırt edilir.
-
-**Yardım → Uygulama kimliği / Help → Application identity** menüsünden veya
-**Cmd/Ctrl+Shift+F12** ile kimlik raporunu açın. **Raporu kopyala / Copy report**
-dosya yollarını, SHA-256 değerlerini ve imza durumunu IT talebine aktarmayı
-sağlar; **Günlükleri aç / Open logs** başlangıç kayıtlarını gösterir.
-
-Derlenmiş arka uç ve CLI için terminalden de rapor alınabilir:
-
-```bash
-./cmd/validex/build/bin/validex-backend --identity
-./cmd/validex/build/bin/validex-cli --identity
-```
-
-Windows'ta dosya adlarına `.exe` ekleyin. Kimlik raporu erişim izni vermez;
-kurumsal onay için [günlük konumları, doğrulama komutları ve hazır IT talep
-şablonunu](docs/security-registration.md) kullanın.
-
-## Testler
+## Testler ve teknik belgeler
 
 | Komut | Kapsam |
 | --- | --- |
-| `make test` | Electron ve frontend TypeScript kontrolleri, Node testleri ve Go testleri. |
-| `make test-e2e` | Derlenmiş frontend üzerinde tarayıcı kabul senaryoları. |
-| `make test-production` | Yukarıdakilerin tamamı, Go race detector ve `go vet`. |
+| `make test` | Electron ve frontend tür kontrolleri, Node testleri, Go birim testleri. |
+| `make test-e2e` | Chrome/Chromium üzerinde arayüz kabul senaryoları. |
+| `make test-production` | Yukarıdaki kontroller, Go yarış koşulu denetimi ve `go vet`. |
 
-E2E testleri Chrome veya Chromium gerektirir. Otomatik bulunamazsa:
-
-```bash
-VALIDEX_E2E_CHROME=/path/to/chrome make test-e2e
-```
-
-Test düzeni ve senaryoların açıklaması
-[examples/testlerin-nasil-calistigi.md](examples/testlerin-nasil-calistigi.md)
-içindedir. CI, kalite ve tarayıcı testlerine ek olarak macOS, Linux ve Windows
-paketlerinin beklenen dosyalarını doğrular.
-
-## Proje yapısı
-
-```text
-cmd/
-  validex/            Electron kabuğu, TypeScript arayüzü ve paketleme
-    electron/         Main process, preload ve Go süreç yönetimi
-    frontend/         Arayüz, stiller ve geliştirme araçları
-  validex-backend/    Masaüstünün Go arka uç süreci
-  validex-cli/        CLI giriş noktası
-internal/            HTTP, OpenAPI, mock, runner, diagnostics ve bridge servisleri
-tests/e2e/           Tarayıcı kabul testleri ve yerel mock API
-examples/            Test akışlarının açıklamaları
-```
-
-Arayüz browser-native TypeScript ile yazılmıştır. Electron preload, renderer’a
-izin listeli bir API sunar; ağ ve dosya işlemleri Go arka ucunda yürütülür.
-Renderer sandbox içinde çalışır ve Node API’lerine doğrudan erişmez.
-`window.canbridge.Bridge`, bu API’nin uyumluluk adıdır. Electron ile Go
-arasındaki iletişim, standart girdi/çıktı üzerinden çerçevelenmiş JSON kullanır.
-
-Süreç sınırları, veri akışları ve mimari kararlar için
-[architect.md](architect.md); üçüncü taraf bileşenlerin lisans bildirimleri
-için [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) dosyasına bakın.
+- [Mimari](architect.md): süreçler, veri akışı ve kodun sorumlulukları.
+- [Test rehberi](examples/testlerin-nasil-calistigi.md): test hazırlığı, E2E ve gerçek Electron denetimleri.
+- [Frontend geliştirme rehberi](cmd/validex/frontend/TYPESCRIPT_ONLY_TOOLCHAIN.md): derleyici, geliştirme sunucusu ve arayüz paketleme.
+- [Uygulama kimliği](docs/security-registration.md): süreç bilgileri, günlükler ve kurumsal kayıt için doğrulama.
+- [Üçüncü taraf bildirimleri](THIRD_PARTY_NOTICES.md): bağımlılıklar ve lisans metinleri.
